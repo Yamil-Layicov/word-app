@@ -6,6 +6,8 @@ import { DatabaseModule } from './database/database.module';
 import { CountryModule } from './modules/countries/country.module';
 import { LanguageModule } from './modules/languages/language.module';
 import { LanguagePairModule } from './modules/language-pairs/language-pair.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { TimeModule } from './common/time/time.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { LanguagePairModule } from './modules/language-pairs/language-pair.modul
     CountryModule,
     LanguageModule,
     LanguagePairModule,
+    AuthModule,
+    TimeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

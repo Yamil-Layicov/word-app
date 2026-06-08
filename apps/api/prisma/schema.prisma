@@ -47,6 +47,7 @@ model User {
 
   profile       UserProfile?
   languagePairs UserLanguagePair[]
+  authSessions  AuthSession[]
 }
 
 model UserProfile {
@@ -77,6 +78,23 @@ model UserLanguagePair {
   languagePair LanguagePair @relation(fields: [languagePairId], references: [id], onDelete: Cascade)
 
   @@unique([userId, languagePairId])
+}
+
+model AuthSession {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Country {

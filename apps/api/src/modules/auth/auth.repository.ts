@@ -94,6 +94,15 @@ export class AuthRepository {
     });
   }
 
+  findUserResponseById(userId: string): Promise<AuthUserResponseModel | null> {
+    return this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: authUserResponseSelect,
+    });
+  }
+
   findActiveLanguagePairById(
     languagePairId: string,
   ): Promise<ActiveLanguagePairCheckResult | null> {

@@ -13,6 +13,7 @@ import { AuthTokenService } from './auth-token.service';
 import { toAuthLoginResponse, toAuthUserResponse } from './auth.mapper';
 import { AuthRepository } from './auth.repository';
 import type {
+  AuthenticatedUser,
   AuthLoginResponse,
   AuthRequestContext,
   AuthUserResponse,
@@ -68,6 +69,20 @@ export class AuthService {
       countryCode,
       languagePairId: registerDto.languagePairId,
     });
+
+    return toAuthUserResponse(user);
+  }
+
+  async me(currentUser: AuthenticatedUser): Promise<AuthUserResponse> {
+    const user = await this.authRepository.findUserResponseById(currentUser.id);
+
+    if (!user) {
+      throw new UnauthorizedException('Unauthorized');
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException('Account is not active');
+    }
 
     return toAuthUserResponse(user);
   }

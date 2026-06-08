@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
+import type { UserRole } from '@prisma/client';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import { ClockService } from '../../common/time/clock.service';
 
 export type AccessTokenPayload = {
   sub: string;
   email: string;
-  role: string;
+  role: UserRole;
 };
 
 type JwtExpiresIn = JwtSignOptions['expiresIn'];
@@ -37,6 +38,18 @@ export class AuthTokenService {
       secret: this.jwtAccessSecret,
       expiresIn: this.jwtAccessExpiresIn,
     });
+  }
+
+  async verifyAccessToken(accessToken: string): Promise<AccessTokenPayload> {
+    const payload = await this.jwtService.verifyAsync<unknown>(accessToken, {
+      secret: this.jwtAccessSecret,
+    });
+
+    if (!this.isAccessTokenPayload(payload)) {
+      throw new Error('Invalid access token payload');
+    }
+
+    return payload;
   }
 
   generateSessionId(): string {
@@ -162,5 +175,19 @@ export class AuthTokenService {
 
   private isBase64UrlSecret(value: string): boolean {
     return /^[A-Za-z0-9_-]{80,120}$/.test(value);
+  }
+
+  private isAccessTokenPayload(value: unknown): value is AccessTokenPayload {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const payload = value as Partial<AccessTokenPayload>;
+
+    return (
+      typeof payload.sub === 'string' &&
+      typeof payload.email === 'string' &&
+      typeof payload.role === 'string'
+    );
   }
 }

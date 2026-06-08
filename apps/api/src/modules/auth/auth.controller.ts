@@ -1,17 +1,21 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpStatus,
   Ip,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import type { AuthRequestContext } from './auth.types';
+import type { AuthenticatedUser, AuthRequestContext } from './auth.types';
+import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { AccessTokenGuard } from './guards/access-token.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -20,6 +24,12 @@ export class AuthController {
   @Post('register')
   register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @Get('me')
+  @UseGuards(AccessTokenGuard)
+  me(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.authService.me(currentUser);
   }
 
   @Post('login')

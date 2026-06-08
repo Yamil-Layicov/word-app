@@ -48,3 +48,9 @@ export type AuthRequestContext = {
   userAgent?: string;
   ipAddress?: string;
 };
+
+export type AuthenticatedUser = {
+  id: string;
+  email: string;
+  role: UserRole;
+};

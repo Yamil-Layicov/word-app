@@ -44,6 +44,12 @@ type RotateAuthSessionInput = {
   now: Date;
 };
 
+type RevokeAuthSessionInput = {
+  id: string;
+  refreshTokenHash: string;
+  now: Date;
+};
+
 const authUserResponseSelect = {
   id: true,
   email: true,
@@ -193,6 +199,21 @@ export class AuthRepository {
       data: {
         refreshTokenHash: input.nextRefreshTokenHash,
         expiresAt: input.expiresAt,
+      },
+    });
+
+    return result.count === 1;
+  }
+
+  async revokeAuthSession(input: RevokeAuthSessionInput): Promise<boolean> {
+    const result = await this.prisma.authSession.updateMany({
+      where: {
+        id: input.id,
+        refreshTokenHash: input.refreshTokenHash,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: input.now,
       },
     });
 

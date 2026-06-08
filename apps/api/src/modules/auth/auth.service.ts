@@ -193,6 +193,26 @@ export class AuthService {
     });
   }
 
+  async logout(refreshTokenDto: RefreshTokenDto): Promise<void> {
+    const sessionId = this.authTokenService.getSessionIdFromRefreshToken(
+      refreshTokenDto.refreshToken,
+    );
+
+    if (!sessionId) {
+      return;
+    }
+
+    const refreshTokenHash = this.authTokenService.hashRefreshToken(
+      refreshTokenDto.refreshToken,
+    );
+
+    await this.authRepository.revokeAuthSession({
+      id: sessionId,
+      refreshTokenHash,
+      now: this.clockService.now(),
+    });
+  }
+
   private normalizeEmail(email: string): string {
     return email.toLowerCase().trim();
   }

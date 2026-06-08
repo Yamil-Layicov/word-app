@@ -11,6 +11,15 @@ coverage
 
 docs/
 
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.db
+backups/
+dumps/
+
 .expo
 .expo-shared
 android

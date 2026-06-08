@@ -9,6 +9,8 @@ dist
 build
 coverage
 
+docs/
+
 .expo
 .expo-shared
 android

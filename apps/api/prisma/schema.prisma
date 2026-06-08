@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AudienceScope {
+  GLOBAL
+  COUNTRY
+  SELECTED_COUNTRIES
+  PRIVATE
+}
+
+model Country {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  emoji     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profiles UserProfile[]
+}
+
+model Language {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  name       String
+  nativeName String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sourcePairs LanguagePair[] @relation("SourceLanguage")
+  targetPairs LanguagePair[] @relation("TargetLanguage")
+}
+
+model LanguagePair {
+  id               String   @id @default(cuid())
+  sourceLanguageId String
+  targetLanguageId String
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  sourceLanguage Language @relation("SourceLanguage", fields: [sourceLanguageId], references: [id])
+  targetLanguage Language @relation("TargetLanguage", fields: [targetLanguageId], references: [id])
+
+  @@unique([sourceLanguageId, targetLanguageId])
+}
+
+model UserProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  displayName        String?
+  countryCode        String?
+  interfaceLanguage  String   @default("az")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  country Country? @relation(fields: [countryCode], references: [code])
+}

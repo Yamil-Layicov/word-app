@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "description": "Vocabulary learning mobile app",
   "main": "index.js",
-  "scripts": {
-    "dev": "echo \"Run mobile and api separately\"",
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+ "scripts": {
+  "dev": "echo \"Run mobile and api separately\"",
+  "api:dev": "pnpm --filter @word-app/api start:dev",
+  "api:build": "pnpm --filter @word-app/api build",
+  "api:lint": "pnpm --filter @word-app/api lint",
+  "docker:up": "docker compose up -d",
+  "docker:down": "docker compose down",
+  "docker:logs": "docker compose logs -f",
+  "test": "echo \"Error: no test specified\" && exit 1"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",

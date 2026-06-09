@@ -41,9 +41,12 @@ export class AuthTokenService {
   }
 
   async verifyAccessToken(accessToken: string): Promise<AccessTokenPayload> {
-    const payload = await this.jwtService.verifyAsync<unknown>(accessToken, {
-      secret: this.jwtAccessSecret,
-    });
+    const payload = await this.jwtService.verifyAsync<Record<string, unknown>>(
+      accessToken,
+      {
+        secret: this.jwtAccessSecret,
+      },
+    );
 
     if (!this.isAccessTokenPayload(payload)) {
       throw new Error('Invalid access token payload');

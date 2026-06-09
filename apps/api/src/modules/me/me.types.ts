@@ -1,4 +1,4 @@
-import type { UserRole, UserStatus } from '@prisma/client';
+import type { CefrLevel, UserRole, UserStatus } from '@prisma/client';
 
 export type MeProfileModel = {
   id: string;
@@ -32,3 +32,29 @@ export type MeProfileResponseModel = {
 };
 
 export type MeProfileResponse = MeProfileResponseModel;
+
+export type MeUserLanguagePairModel = {
+  id: string;
+  languagePairId: string;
+  languagePair: MeLanguagePairModel;
+  isLearning: boolean;
+  targetCefrLevel: CefrLevel | null;
+  createdAt: Date;
+};
+
+export type MeLanguagePairsModel = {
+  activeLanguagePairId: string | null;
+  languagePairs: MeUserLanguagePairModel[];
+};
+
+export type MeLanguagePairListItemResponse = {
+  id: string;
+  languagePairId: string;
+  languagePair: MeLanguagePairModel;
+  isLearning: boolean;
+  targetCefrLevel: CefrLevel | null;
+  isActive: boolean;
+  createdAt: Date;
+};
+
+export type MeLanguagePairsResponse = MeLanguagePairListItemResponse[];

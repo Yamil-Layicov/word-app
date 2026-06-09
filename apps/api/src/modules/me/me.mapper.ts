@@ -1,4 +1,9 @@
-import type { MeProfileResponse, MeProfileResponseModel } from './me.types';
+import type {
+  MeLanguagePairsModel,
+  MeLanguagePairsResponse,
+  MeProfileResponse,
+  MeProfileResponseModel,
+} from './me.types';
 
 export function toMeProfileResponse(
   user: MeProfileResponseModel,
@@ -20,4 +25,18 @@ export function toMeProfileResponse(
     activeLanguagePair: user.activeLanguagePair,
     createdAt: user.createdAt,
   };
+}
+
+export function toMeLanguagePairsResponse(
+  input: MeLanguagePairsModel,
+): MeLanguagePairsResponse {
+  return input.languagePairs.map((userLanguagePair) => ({
+    id: userLanguagePair.id,
+    languagePairId: userLanguagePair.languagePairId,
+    languagePair: userLanguagePair.languagePair,
+    isLearning: userLanguagePair.isLearning,
+    targetCefrLevel: userLanguagePair.targetCefrLevel,
+    isActive: userLanguagePair.languagePairId === input.activeLanguagePairId,
+    createdAt: userLanguagePair.createdAt,
+  }));
 }

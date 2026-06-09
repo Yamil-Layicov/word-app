@@ -10,5 +10,6 @@ import { AccessTokenGuard } from './guards/access-token.guard';
   imports: [JwtModule.register({})],
   controllers: [AuthController],
   providers: [AuthService, AuthRepository, AuthTokenService, AccessTokenGuard],
+  exports: [AuthTokenService, AccessTokenGuard],
 })
 export class AuthModule {}

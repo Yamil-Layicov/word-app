@@ -7,9 +7,18 @@ import {
 import { UserStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateVocabularyItemDto } from './dto/create-vocabulary-item.dto';
-import { toVocabularyItemResponse } from './vocabulary.mapper';
+import { ListVocabularyItemsQueryDto } from './dto/list-vocabulary-items-query.dto';
+import {
+  toListVocabularyItemsResponse,
+  toVocabularyItemResponse,
+} from './vocabulary.mapper';
 import { VocabularyRepository } from './vocabulary.repository';
-import type { VocabularyItemResponse } from './vocabulary.types';
+import type {
+  ListVocabularyItemsResponse,
+  VocabularyItemResponse,
+} from './vocabulary.types';
+
+const DEFAULT_LIST_LIMIT = 20;
 
 @Injectable()
 export class VocabularyService {
@@ -19,40 +28,9 @@ export class VocabularyService {
     currentUser: AuthenticatedUser,
     createVocabularyItemDto: CreateVocabularyItemDto,
   ): Promise<VocabularyItemResponse> {
-    const userContext = await this.vocabularyRepository.findUserContext(
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
       currentUser.id,
     );
-
-    if (!userContext) {
-      throw new UnauthorizedException('Unauthorized');
-    }
-
-    if (userContext.status !== UserStatus.ACTIVE) {
-      throw new ForbiddenException('Account is not active');
-    }
-
-    const activeLanguagePairId = userContext.profile?.activeLanguagePairId;
-
-    if (!activeLanguagePairId) {
-      throw new BadRequestException('Active language pair is not selected');
-    }
-
-    const activeUserLanguagePair = userContext.languagePairs.find(
-      (userLanguagePair) =>
-        userLanguagePair.languagePairId === activeLanguagePairId,
-    );
-
-    if (!activeUserLanguagePair) {
-      throw new BadRequestException('Active language pair is not available');
-    }
-
-    if (!activeUserLanguagePair.isLearning) {
-      throw new BadRequestException('Active language pair is not enabled');
-    }
-
-    if (!activeUserLanguagePair.languagePair.isActive) {
-      throw new BadRequestException('Active language pair is not active');
-    }
 
     const sourceText = this.normalizeInputText(
       createVocabularyItemDto.sourceText,
@@ -90,6 +68,73 @@ export class VocabularyService {
     });
 
     return toVocabularyItemResponse(result);
+  }
+
+  async listItems(
+    currentUser: AuthenticatedUser,
+    query: ListVocabularyItemsQueryDto,
+  ): Promise<ListVocabularyItemsResponse> {
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+
+    const searchNormalized =
+      query.search !== undefined
+        ? this.normalizeOptionalText(query.search)
+        : undefined;
+
+    const result = await this.vocabularyRepository.findUserVocabularyItems({
+      userId: currentUser.id,
+      languagePairId: activeLanguagePairId,
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.isFavorite !== undefined
+        ? { isFavorite: query.isFavorite }
+        : {}),
+      ...(searchNormalized
+        ? { searchNormalized: this.normalizeSearchText(searchNormalized) }
+        : {}),
+      limit: query.limit ?? DEFAULT_LIST_LIMIT,
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+    });
+
+    return toListVocabularyItemsResponse(result);
+  }
+
+  private async getActiveLanguagePairId(userId: string): Promise<string> {
+    const userContext = await this.vocabularyRepository.findUserContext(userId);
+
+    if (!userContext) {
+      throw new UnauthorizedException('Unauthorized');
+    }
+
+    if (userContext.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException('Account is not active');
+    }
+
+    const activeLanguagePairId = userContext.profile?.activeLanguagePairId;
+
+    if (!activeLanguagePairId) {
+      throw new BadRequestException('Active language pair is not selected');
+    }
+
+    const activeUserLanguagePair = userContext.languagePairs.find(
+      (userLanguagePair) =>
+        userLanguagePair.languagePairId === activeLanguagePairId,
+    );
+
+    if (!activeUserLanguagePair) {
+      throw new BadRequestException('Active language pair is not available');
+    }
+
+    if (!activeUserLanguagePair.isLearning) {
+      throw new BadRequestException('Active language pair is not enabled');
+    }
+
+    if (!activeUserLanguagePair.languagePair.isActive) {
+      throw new BadRequestException('Active language pair is not active');
+    }
+
+    return activeLanguagePairId;
   }
 
   private normalizeInputText(value: string): string {

@@ -1,8 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { AudienceScope, WordType, type CefrLevel } from '@prisma/client';
+import {
+  AudienceScope,
+  WordType,
+  type CefrLevel,
+  type UserWordStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type {
   CreateVocabularyItemResult,
+  ListVocabularyItemsResult,
   VocabularyUserContext,
 } from './vocabulary.types';
 
@@ -23,6 +29,16 @@ type CreateVocabularyItemInput = {
   definition?: string;
   note?: string;
   examples: CreateVocabularyExampleInput[];
+};
+
+type ListVocabularyItemsInput = {
+  userId: string;
+  languagePairId: string;
+  status?: UserWordStatus;
+  isFavorite?: boolean;
+  searchNormalized?: string;
+  limit: number;
+  cursor?: string;
 };
 
 const vocabularyExampleSelect = {
@@ -63,6 +79,13 @@ const userWordSelect = {
   lastReviewedAt: true,
   nextReviewAt: true,
   createdAt: true,
+} as const;
+
+const userWordWithVocabularyItemSelect = {
+  ...userWordSelect,
+  vocabularyItem: {
+    select: vocabularyItemSelect,
+  },
 } as const;
 
 @Injectable()
@@ -155,5 +178,69 @@ export class VocabularyRepository {
         userWord,
       };
     });
+  }
+
+  async findUserVocabularyItems(
+    input: ListVocabularyItemsInput,
+  ): Promise<ListVocabularyItemsResult> {
+    const userWords = await this.prisma.userWord.findMany({
+      where: {
+        userId: input.userId,
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.isFavorite !== undefined
+          ? { isFavorite: input.isFavorite }
+          : {}),
+        vocabularyItem: {
+          languagePairId: input.languagePairId,
+          isActive: true,
+          ...(input.searchNormalized
+            ? {
+                OR: [
+                  {
+                    sourceNormalized: {
+                      contains: input.searchNormalized,
+                    },
+                  },
+                  {
+                    targetNormalized: {
+                      contains: input.searchNormalized,
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+      },
+      orderBy: [
+        {
+          createdAt: 'desc',
+        },
+        {
+          id: 'desc',
+        },
+      ],
+      take: input.limit + 1,
+      ...(input.cursor
+        ? {
+            cursor: {
+              id: input.cursor,
+            },
+            skip: 1,
+          }
+        : {}),
+      select: userWordWithVocabularyItemSelect,
+    });
+
+    const hasNextPage = userWords.length > input.limit;
+    const pageItems = hasNextPage ? userWords.slice(0, input.limit) : userWords;
+    const lastItem = pageItems[pageItems.length - 1];
+
+    return {
+      items: pageItems.map(({ vocabularyItem, ...userWord }) => ({
+        vocabularyItem,
+        userWord,
+      })),
+      nextCursor: hasNextPage && lastItem ? lastItem.id : null,
+    };
   }
 }

@@ -1,5 +1,7 @@
 import type {
   CreateVocabularyItemResult,
+  ListVocabularyItemsResponse,
+  ListVocabularyItemsResult,
   VocabularyItemResponse,
 } from './vocabulary.types';
 
@@ -36,5 +38,14 @@ export function toVocabularyItemResponse(
       createdAt: result.userWord.createdAt,
     },
     createdAt: result.vocabularyItem.createdAt,
+  };
+}
+
+export function toListVocabularyItemsResponse(
+  result: ListVocabularyItemsResult,
+): ListVocabularyItemsResponse {
+  return {
+    items: result.items.map(toVocabularyItemResponse),
+    nextCursor: result.nextCursor,
   };
 }

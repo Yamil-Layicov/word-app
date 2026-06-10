@@ -57,9 +57,21 @@ export type VocabularyItemResponse = {
   createdAt: Date;
 };
 
+export type ListVocabularyItemsResponse = {
+  items: VocabularyItemResponse[];
+  nextCursor: string | null;
+};
+
 export type CreateVocabularyItemResult = {
   vocabularyItem: VocabularyItemModel;
   userWord: UserWordModel;
+};
+
+export type VocabularyListItemResult = CreateVocabularyItemResult;
+
+export type ListVocabularyItemsResult = {
+  items: VocabularyListItemResult[];
+  nextCursor: string | null;
 };
 
 export type VocabularyUserContext = {

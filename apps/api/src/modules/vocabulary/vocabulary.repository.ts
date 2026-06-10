@@ -41,6 +41,14 @@ type ListVocabularyItemsInput = {
   cursor?: string;
 };
 
+type UpdateUserVocabularyItemInput = {
+  userId: string;
+  vocabularyItemId: string;
+  languagePairId: string;
+  isFavorite?: boolean;
+  status?: UserWordStatus;
+};
+
 const vocabularyExampleSelect = {
   id: true,
   sourceSentence: true,
@@ -241,6 +249,48 @@ export class VocabularyRepository {
         userWord,
       })),
       nextCursor: hasNextPage && lastItem ? lastItem.id : null,
+    };
+  }
+
+  async updateUserVocabularyItem(
+    input: UpdateUserVocabularyItemInput,
+  ): Promise<CreateVocabularyItemResult | null> {
+    const userWord = await this.prisma.userWord.findFirst({
+      where: {
+        userId: input.userId,
+        vocabularyItemId: input.vocabularyItemId,
+        vocabularyItem: {
+          languagePairId: input.languagePairId,
+          isActive: true,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!userWord) {
+      return null;
+    }
+
+    const updatedUserWord = await this.prisma.userWord.update({
+      where: {
+        id: userWord.id,
+      },
+      data: {
+        ...(input.isFavorite !== undefined
+          ? { isFavorite: input.isFavorite }
+          : {}),
+        ...(input.status ? { status: input.status } : {}),
+      },
+      select: userWordWithVocabularyItemSelect,
+    });
+
+    const { vocabularyItem, ...userWordModel } = updatedUserWord;
+
+    return {
+      vocabularyItem,
+      userWord: userWordModel,
     };
   }
 }

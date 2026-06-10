@@ -2,12 +2,14 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateVocabularyItemDto } from './dto/create-vocabulary-item.dto';
 import { ListVocabularyItemsQueryDto } from './dto/list-vocabulary-items-query.dto';
+import { UpdateUserVocabularyItemDto } from './dto/update-user-vocabulary-item.dto';
 import {
   toListVocabularyItemsResponse,
   toVocabularyItemResponse,
@@ -98,6 +100,41 @@ export class VocabularyService {
     });
 
     return toListVocabularyItemsResponse(result);
+  }
+
+  async updateUserItem(
+    currentUser: AuthenticatedUser,
+    vocabularyItemId: string,
+    updateUserVocabularyItemDto: UpdateUserVocabularyItemDto,
+  ): Promise<VocabularyItemResponse> {
+    if (
+      updateUserVocabularyItemDto.isFavorite === undefined &&
+      updateUserVocabularyItemDto.status === undefined
+    ) {
+      throw new BadRequestException('At least one field must be provided');
+    }
+
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+
+    const result = await this.vocabularyRepository.updateUserVocabularyItem({
+      userId: currentUser.id,
+      vocabularyItemId,
+      languagePairId: activeLanguagePairId,
+      ...(updateUserVocabularyItemDto.isFavorite !== undefined
+        ? { isFavorite: updateUserVocabularyItemDto.isFavorite }
+        : {}),
+      ...(updateUserVocabularyItemDto.status
+        ? { status: updateUserVocabularyItemDto.status }
+        : {}),
+    });
+
+    if (!result) {
+      throw new NotFoundException('Vocabulary item not found');
+    }
+
+    return toVocabularyItemResponse(result);
   }
 
   private async getActiveLanguagePairId(userId: string): Promise<string> {

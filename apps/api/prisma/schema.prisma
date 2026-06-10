@@ -34,6 +34,33 @@ enum CefrLevel {
   C2
 }
 
+enum WordType {
+  NOUN
+  VERB
+  ADJECTIVE
+  ADVERB
+  PHRASE
+  IDIOM
+  PHRASAL_VERB
+  SENTENCE
+  OTHER
+}
+
+enum UserWordStatus {
+  NEW
+  LEARNING
+  REVIEWING
+  MASTERED
+  ARCHIVED
+}
+
+enum ReviewRating {
+  AGAIN
+  HARD
+  GOOD
+  EASY
+}
+
 model User {
   id              String     @id @default(cuid())
   email           String     @unique
@@ -45,9 +72,12 @@ model User {
   updatedAt       DateTime   @updatedAt
   deletedAt       DateTime?
 
-  profile       UserProfile?
-  languagePairs UserLanguagePair[]
-  authSessions  AuthSession[]
+  profile                UserProfile?
+  languagePairs          UserLanguagePair[]
+  authSessions           AuthSession[]
+  createdVocabularyItems VocabularyItem[]   @relation("VocabularyItemCreator")
+  userWords              UserWord[]
+  reviewLogs             ReviewLog[]
 }
 
 model UserProfile {
@@ -66,13 +96,13 @@ model UserProfile {
 }
 
 model UserLanguagePair {
-  id             String     @id @default(cuid())
-  userId         String
-  languagePairId String
-  isLearning     Boolean    @default(true)
+  id              String     @id @default(cuid())
+  userId          String
+  languagePairId  String
+  isLearning      Boolean    @default(true)
   targetCefrLevel CefrLevel?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   languagePair LanguagePair @relation(fields: [languagePairId], references: [id], onDelete: Cascade)
@@ -135,6 +165,96 @@ model LanguagePair {
 
   activeProfiles    UserProfile[]      @relation("ActiveLanguagePair")
   userLanguagePairs UserLanguagePair[]
+  vocabularyItems   VocabularyItem[]
 
   @@unique([sourceLanguageId, targetLanguageId])
+}
+
+model VocabularyItem {
+  id               String        @id @default(cuid())
+  languagePairId   String
+  sourceText       String
+  targetText       String
+  sourceNormalized String
+  targetNormalized String
+  wordType         WordType      @default(OTHER)
+  cefrLevel        CefrLevel?
+  definition       String?
+  note             String?
+  visibility       AudienceScope @default(PRIVATE)
+  createdByUserId  String?
+  isActive         Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  languagePair  LanguagePair        @relation(fields: [languagePairId], references: [id], onDelete: Cascade)
+  createdByUser User?               @relation("VocabularyItemCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  examples      VocabularyExample[]
+  userWords     UserWord[]
+  reviewLogs    ReviewLog[]
+
+  @@unique([languagePairId, sourceNormalized, targetNormalized])
+  @@index([languagePairId])
+  @@index([createdByUserId])
+  @@index([wordType])
+  @@index([cefrLevel])
+}
+
+model VocabularyExample {
+  id               String   @id @default(cuid())
+  vocabularyItemId String
+  sourceSentence   String
+  targetSentence   String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+
+  @@index([vocabularyItemId])
+}
+
+model UserWord {
+  id               String         @id @default(cuid())
+  userId           String
+  vocabularyItemId String
+  status           UserWordStatus @default(NEW)
+  isFavorite       Boolean        @default(false)
+  easeFactor       Float          @default(2.5)
+  intervalDays     Int            @default(0)
+  reviewCount      Int            @default(0)
+  correctCount     Int            @default(0)
+  wrongCount       Int            @default(0)
+  lastReviewedAt   DateTime?
+  nextReviewAt     DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+  reviewLogs     ReviewLog[]
+
+  @@unique([userId, vocabularyItemId])
+  @@index([userId])
+  @@index([vocabularyItemId])
+  @@index([status])
+  @@index([nextReviewAt])
+}
+
+model ReviewLog {
+  id               String       @id @default(cuid())
+  userId           String
+  userWordId       String
+  vocabularyItemId String
+  rating           ReviewRating
+  isCorrect        Boolean
+  answeredAt       DateTime     @default(now())
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userWord       UserWord       @relation(fields: [userWordId], references: [id], onDelete: Cascade)
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userWordId])
+  @@index([vocabularyItemId])
+  @@index([answeredAt])
 }

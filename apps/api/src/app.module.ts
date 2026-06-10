@@ -9,6 +9,7 @@ import { CountryModule } from './modules/countries/country.module';
 import { LanguagePairModule } from './modules/language-pairs/language-pair.module';
 import { LanguageModule } from './modules/languages/language.module';
 import { MeModule } from './modules/me/me.module';
+import { VocabularyModule } from './modules/vocabulary/vocabulary.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { MeModule } from './modules/me/me.module';
     LanguagePairModule,
     AuthModule,
     MeModule,
+    VocabularyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

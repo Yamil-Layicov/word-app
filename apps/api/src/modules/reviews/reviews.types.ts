@@ -89,6 +89,21 @@ export type AnswerReviewResponse = {
   reviewLog: ReviewLogModel;
 };
 
+export type ReviewTimelineUserWordResult = {
+  id: string;
+  nextReviewAt: Date | null;
+};
+
+export type ReviewTimelineGroupResponse = {
+  date: string;
+  totalWords: number;
+  dueWords: number;
+};
+
+export type ReviewTimelineResponse = {
+  groups: ReviewTimelineGroupResponse[];
+};
+
 export type ReviewUserContext = {
   status: UserStatus;
   profile: {

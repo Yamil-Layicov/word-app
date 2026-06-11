@@ -4,6 +4,7 @@ import { PrismaService } from '../../database/prisma.service';
 import type {
   AnswerReviewResult,
   DueReviewItemResult,
+  ReviewTimelineUserWordResult,
   ReviewUserContext,
 } from './reviews.types';
 
@@ -12,6 +13,12 @@ type FindDueReviewItemsInput = {
   languagePairId: string;
   now: Date;
   limit: number;
+};
+
+type FindReviewTimelineItemsInput = {
+  userId: string;
+  languagePairId: string;
+  timelineEndAt: Date;
 };
 
 type FindReviewTargetInput = {
@@ -159,6 +166,48 @@ export class ReviewsRepository {
       userWord,
       vocabularyItem,
     }));
+  }
+
+  findReviewTimelineItems(
+    input: FindReviewTimelineItemsInput,
+  ): Promise<ReviewTimelineUserWordResult[]> {
+    return this.prisma.userWord.findMany({
+      where: {
+        userId: input.userId,
+        status: {
+          not: UserWordStatus.ARCHIVED,
+        },
+        OR: [
+          {
+            nextReviewAt: null,
+          },
+          {
+            nextReviewAt: {
+              lte: input.timelineEndAt,
+            },
+          },
+        ],
+        vocabularyItem: {
+          languagePairId: input.languagePairId,
+          isActive: true,
+        },
+      },
+      orderBy: [
+        {
+          nextReviewAt: 'asc',
+        },
+        {
+          createdAt: 'asc',
+        },
+        {
+          id: 'asc',
+        },
+      ],
+      select: {
+        id: true,
+        nextReviewAt: true,
+      },
+    });
   }
 
   async findReviewTarget(

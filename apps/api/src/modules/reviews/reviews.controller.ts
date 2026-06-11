@@ -4,6 +4,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 import { AnswerReviewDto } from './dto/answer-review.dto';
 import { GetDueReviewsQueryDto } from './dto/get-due-reviews-query.dto';
+import { GetReviewTimelineQueryDto } from './dto/get-review-timeline-query.dto';
 import { ReviewsService } from './reviews.service';
 
 @Controller('reviews')
@@ -17,6 +18,15 @@ export class ReviewsController {
     @Query() query: GetDueReviewsQueryDto,
   ) {
     return this.reviewsService.getDueReviews(currentUser, query);
+  }
+
+  @Get('timeline')
+  @UseGuards(AccessTokenGuard)
+  getReviewTimeline(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: GetReviewTimelineQueryDto,
+  ) {
+    return this.reviewsService.getReviewTimeline(currentUser, query);
   }
 
   @Post('answer')

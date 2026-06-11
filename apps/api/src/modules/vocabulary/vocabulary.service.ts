@@ -102,6 +102,27 @@ export class VocabularyService {
     return toListVocabularyItemsResponse(result);
   }
 
+  async getItem(
+    currentUser: AuthenticatedUser,
+    vocabularyItemId: string,
+  ): Promise<VocabularyItemResponse> {
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+
+    const result = await this.vocabularyRepository.findUserVocabularyItemById({
+      userId: currentUser.id,
+      vocabularyItemId,
+      languagePairId: activeLanguagePairId,
+    });
+
+    if (!result) {
+      throw new NotFoundException('Vocabulary item not found');
+    }
+
+    return toVocabularyItemResponse(result);
+  }
+
   async updateUserItem(
     currentUser: AuthenticatedUser,
     vocabularyItemId: string,
@@ -135,6 +156,26 @@ export class VocabularyService {
     }
 
     return toVocabularyItemResponse(result);
+  }
+
+  async archiveUserItem(
+    currentUser: AuthenticatedUser,
+    vocabularyItemId: string,
+  ): Promise<void> {
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+
+    const isArchived =
+      await this.vocabularyRepository.archiveUserVocabularyItem({
+        userId: currentUser.id,
+        vocabularyItemId,
+        languagePairId: activeLanguagePairId,
+      });
+
+    if (!isArchived) {
+      throw new NotFoundException('Vocabulary item not found');
+    }
   }
 
   private async getActiveLanguagePairId(userId: string): Promise<string> {

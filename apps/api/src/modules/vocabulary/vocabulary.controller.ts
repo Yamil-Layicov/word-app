@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -29,6 +32,15 @@ export class VocabularyController {
     return this.vocabularyService.listItems(currentUser, query);
   }
 
+  @Get('items/:id')
+  @UseGuards(AccessTokenGuard)
+  getItem(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') vocabularyItemId: string,
+  ) {
+    return this.vocabularyService.getItem(currentUser, vocabularyItemId);
+  }
+
   @Post('items')
   @UseGuards(AccessTokenGuard)
   createItem(
@@ -52,6 +64,19 @@ export class VocabularyController {
       currentUser,
       vocabularyItemId,
       updateUserVocabularyItemDto,
+    );
+  }
+
+  @Delete('items/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(AccessTokenGuard)
+  archiveUserItem(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') vocabularyItemId: string,
+  ) {
+    return this.vocabularyService.archiveUserItem(
+      currentUser,
+      vocabularyItemId,
     );
   }
 }

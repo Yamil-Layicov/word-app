@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import {
   AudienceScope,
+  UserWordStatus,
   WordType,
   type CefrLevel,
-  type UserWordStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type {
@@ -41,12 +41,24 @@ type ListVocabularyItemsInput = {
   cursor?: string;
 };
 
+type FindUserVocabularyItemInput = {
+  userId: string;
+  vocabularyItemId: string;
+  languagePairId: string;
+};
+
 type UpdateUserVocabularyItemInput = {
   userId: string;
   vocabularyItemId: string;
   languagePairId: string;
   isFavorite?: boolean;
   status?: UserWordStatus;
+};
+
+type ArchiveUserVocabularyItemInput = {
+  userId: string;
+  vocabularyItemId: string;
+  languagePairId: string;
 };
 
 const vocabularyExampleSelect = {
@@ -194,7 +206,9 @@ export class VocabularyRepository {
     const userWords = await this.prisma.userWord.findMany({
       where: {
         userId: input.userId,
-        ...(input.status ? { status: input.status } : {}),
+        status: input.status ?? {
+          not: UserWordStatus.ARCHIVED,
+        },
         ...(input.isFavorite !== undefined
           ? { isFavorite: input.isFavorite }
           : {}),
@@ -252,6 +266,33 @@ export class VocabularyRepository {
     };
   }
 
+  async findUserVocabularyItemById(
+    input: FindUserVocabularyItemInput,
+  ): Promise<CreateVocabularyItemResult | null> {
+    const userWord = await this.prisma.userWord.findFirst({
+      where: {
+        userId: input.userId,
+        vocabularyItemId: input.vocabularyItemId,
+        vocabularyItem: {
+          languagePairId: input.languagePairId,
+          isActive: true,
+        },
+      },
+      select: userWordWithVocabularyItemSelect,
+    });
+
+    if (!userWord) {
+      return null;
+    }
+
+    const { vocabularyItem, ...userWordModel } = userWord;
+
+    return {
+      vocabularyItem,
+      userWord: userWordModel,
+    };
+  }
+
   async updateUserVocabularyItem(
     input: UpdateUserVocabularyItemInput,
   ): Promise<CreateVocabularyItemResult | null> {
@@ -292,5 +333,25 @@ export class VocabularyRepository {
       vocabularyItem,
       userWord: userWordModel,
     };
+  }
+
+  async archiveUserVocabularyItem(
+    input: ArchiveUserVocabularyItemInput,
+  ): Promise<boolean> {
+    const result = await this.prisma.userWord.updateMany({
+      where: {
+        userId: input.userId,
+        vocabularyItemId: input.vocabularyItemId,
+        vocabularyItem: {
+          languagePairId: input.languagePairId,
+          isActive: true,
+        },
+      },
+      data: {
+        status: UserWordStatus.ARCHIVED,
+      },
+    });
+
+    return result.count > 0;
   }
 }

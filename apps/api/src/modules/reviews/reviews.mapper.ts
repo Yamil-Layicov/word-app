@@ -4,6 +4,7 @@ import type {
   DueReviewItemResponse,
   DueReviewItemResult,
   DueReviewsResponse,
+  ReviewTimelineItemsResponse,
 } from './reviews.types';
 
 export function toDueReviewItemResponse(
@@ -37,6 +38,19 @@ export function toDueReviewsResponse(
 ): DueReviewsResponse {
   return {
     items: items.map(toDueReviewItemResponse),
+  };
+}
+
+export function toReviewTimelineItemsResponse(input: {
+  date: string;
+  dueWords: number;
+  items: DueReviewItemResult[];
+}): ReviewTimelineItemsResponse {
+  return {
+    date: input.date,
+    totalWords: input.items.length,
+    dueWords: input.dueWords,
+    items: input.items.map(toDueReviewItemResponse),
   };
 }
 

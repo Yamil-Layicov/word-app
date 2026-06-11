@@ -104,6 +104,13 @@ export type ReviewTimelineResponse = {
   groups: ReviewTimelineGroupResponse[];
 };
 
+export type ReviewTimelineItemsResponse = {
+  date: string;
+  totalWords: number;
+  dueWords: number;
+  items: DueReviewItemResponse[];
+};
+
 export type ReviewUserContext = {
   status: UserStatus;
   profile: {

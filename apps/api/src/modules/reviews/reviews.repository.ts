@@ -21,6 +21,14 @@ type FindReviewTimelineItemsInput = {
   timelineEndAt: Date;
 };
 
+type FindReviewTimelineItemsForDateInput = {
+  userId: string;
+  languagePairId: string;
+  dateStartAt: Date;
+  dateEndAt: Date;
+  includeUnscheduledDue: boolean;
+};
+
 type FindReviewTargetInput = {
   userId: string;
   languagePairId: string;
@@ -208,6 +216,62 @@ export class ReviewsRepository {
         nextReviewAt: true,
       },
     });
+  }
+
+  async findReviewTimelineItemsForDate(
+    input: FindReviewTimelineItemsForDateInput,
+  ): Promise<DueReviewItemResult[]> {
+    const reviewDateWhere = input.includeUnscheduledDue
+      ? {
+          OR: [
+            {
+              nextReviewAt: null,
+            },
+            {
+              nextReviewAt: {
+                gte: input.dateStartAt,
+                lt: input.dateEndAt,
+              },
+            },
+          ],
+        }
+      : {
+          nextReviewAt: {
+            gte: input.dateStartAt,
+            lt: input.dateEndAt,
+          },
+        };
+
+    const userWords = await this.prisma.userWord.findMany({
+      where: {
+        userId: input.userId,
+        status: {
+          not: UserWordStatus.ARCHIVED,
+        },
+        ...reviewDateWhere,
+        vocabularyItem: {
+          languagePairId: input.languagePairId,
+          isActive: true,
+        },
+      },
+      orderBy: [
+        {
+          nextReviewAt: 'asc',
+        },
+        {
+          createdAt: 'asc',
+        },
+        {
+          id: 'asc',
+        },
+      ],
+      select: userWordWithVocabularyItemSelect,
+    });
+
+    return userWords.map(({ vocabularyItem, ...userWord }) => ({
+      userWord,
+      vocabularyItem,
+    }));
   }
 
   async findReviewTarget(

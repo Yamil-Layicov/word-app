@@ -4,18 +4,26 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { ReviewRating, UserStatus } from '@prisma/client';
 import { ClockService } from '../../common/time/clock.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { AnswerReviewDto } from './dto/answer-review.dto';
 import { GetDueReviewsQueryDto } from './dto/get-due-reviews-query.dto';
+import { GetReviewTimelineItemsQueryDto } from './dto/get-review-timeline-items-query.dto';
+import { GetReviewTimelineItemsParamDto } from './dto/get-review-timeline-items-param.dto';
 import { GetReviewTimelineQueryDto } from './dto/get-review-timeline-query.dto';
-import { toAnswerReviewResponse, toDueReviewsResponse } from './reviews.mapper';
+import {
+  toAnswerReviewResponse,
+  toDueReviewsResponse,
+  toReviewTimelineItemsResponse,
+} from './reviews.mapper';
 import { ReviewsRepository } from './reviews.repository';
 import type {
   AnswerReviewResponse,
   DueReviewsResponse,
+  ReviewTimelineItemsResponse,
   ReviewTimelineResponse,
 } from './reviews.types';
 import { SpacedRepetitionService } from './spaced-repetition.service';
@@ -108,6 +116,47 @@ export class ReviewsService {
     };
   }
 
+  async getReviewTimelineItems(
+    currentUser: AuthenticatedUser,
+    params: GetReviewTimelineItemsParamDto,
+    query: GetReviewTimelineItemsQueryDto,
+  ): Promise<ReviewTimelineItemsResponse> {
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+
+    const timeZone = query.timeZone ?? DEFAULT_TIME_ZONE;
+
+    this.validateTimeZone(timeZone);
+    this.validateDateKey(params.date);
+
+    const now = this.clockService.now();
+    const todayDateKey = this.toDateKey(now, timeZone);
+    const { dateStartAt, dateEndAt } = this.toUtcRangeForDateKey(
+      params.date,
+      timeZone,
+    );
+
+    const items = await this.reviewsRepository.findReviewTimelineItemsForDate({
+      userId: currentUser.id,
+      languagePairId: activeLanguagePairId,
+      dateStartAt,
+      dateEndAt,
+      includeUnscheduledDue: params.date === todayDateKey,
+    });
+
+    const dueWords = items.filter(
+      (item) =>
+        !item.userWord.nextReviewAt || item.userWord.nextReviewAt <= now,
+    ).length;
+
+    return toReviewTimelineItemsResponse({
+      date: params.date,
+      dueWords,
+      items,
+    });
+  }
+
   async answerReview(
     currentUser: AuthenticatedUser,
     answerReviewDto: AnswerReviewDto,
@@ -183,6 +232,20 @@ export class ReviewsService {
     }
   }
 
+  private validateDateKey(dateKey: string): void {
+    const { year, month, day } = this.parseDateKey(dateKey);
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    const isValidDate =
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day;
+
+    if (!isValidDate) {
+      throw new BadRequestException('Invalid date');
+    }
+  }
+
   private toDateKey(date: Date, timeZone: string): string {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone,
@@ -191,15 +254,125 @@ export class ReviewsService {
       day: '2-digit',
     }).formatToParts(date);
 
-    const year = parts.find((part) => part.type === 'year')?.value;
-    const month = parts.find((part) => part.type === 'month')?.value;
-    const day = parts.find((part) => part.type === 'day')?.value;
-
-    if (!year || !month || !day) {
-      throw new BadRequestException('Invalid date format');
-    }
+    const year = this.getDatePart(parts, 'year');
+    const month = this.getDatePart(parts, 'month');
+    const day = this.getDatePart(parts, 'day');
 
     return `${year}-${month}-${day}`;
+  }
+
+  private toUtcRangeForDateKey(
+    dateKey: string,
+    timeZone: string,
+  ): { dateStartAt: Date; dateEndAt: Date } {
+    const { year, month, day } = this.parseDateKey(dateKey);
+
+    const nextDay = new Date(Date.UTC(year, month - 1, day) + MS_PER_DAY);
+
+    return {
+      dateStartAt: this.zonedDateTimeToUtc({
+        year,
+        month,
+        day,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        timeZone,
+      }),
+      dateEndAt: this.zonedDateTimeToUtc({
+        year: nextDay.getUTCFullYear(),
+        month: nextDay.getUTCMonth() + 1,
+        day: nextDay.getUTCDate(),
+        hour: 0,
+        minute: 0,
+        second: 0,
+        timeZone,
+      }),
+    };
+  }
+
+  private parseDateKey(dateKey: string): {
+    year: number;
+    month: number;
+    day: number;
+  } {
+    const [year, month, day] = dateKey.split('-').map(Number);
+
+    if (!year || !month || !day) {
+      throw new BadRequestException('Invalid date');
+    }
+
+    return {
+      year,
+      month,
+      day,
+    };
+  }
+
+  private zonedDateTimeToUtc(input: {
+    year: number;
+    month: number;
+    day: number;
+    hour: number;
+    minute: number;
+    second: number;
+    timeZone: string;
+  }): Date {
+    const utcTimestamp = Date.UTC(
+      input.year,
+      input.month - 1,
+      input.day,
+      input.hour,
+      input.minute,
+      input.second,
+    );
+
+    const firstOffset = this.getTimeZoneOffsetMs(
+      new Date(utcTimestamp),
+      input.timeZone,
+    );
+
+    const firstGuess = new Date(utcTimestamp - firstOffset);
+    const secondOffset = this.getTimeZoneOffsetMs(firstGuess, input.timeZone);
+
+    return new Date(utcTimestamp - secondOffset);
+  }
+
+  private getTimeZoneOffsetMs(date: Date, timeZone: string): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+
+    const year = Number(this.getDatePart(parts, 'year'));
+    const month = Number(this.getDatePart(parts, 'month'));
+    const day = Number(this.getDatePart(parts, 'day'));
+    const hour = Number(this.getDatePart(parts, 'hour'));
+    const minute = Number(this.getDatePart(parts, 'minute'));
+    const second = Number(this.getDatePart(parts, 'second'));
+
+    const asUtcTimestamp = Date.UTC(year, month - 1, day, hour, minute, second);
+
+    return asUtcTimestamp - date.getTime();
+  }
+
+  private getDatePart(
+    parts: Intl.DateTimeFormatPart[],
+    type: Intl.DateTimeFormatPart['type'],
+  ): string {
+    const value = parts.find((part) => part.type === type)?.value;
+
+    if (!value) {
+      throw new InternalServerErrorException('Failed to format date');
+    }
+
+    return value;
   }
 
   private async getActiveLanguagePairId(userId: string): Promise<string> {

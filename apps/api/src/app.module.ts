@@ -11,6 +11,7 @@ import { LanguageModule } from './modules/languages/language.module';
 import { MeModule } from './modules/me/me.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { VocabularyModule } from './modules/vocabulary/vocabulary.module';
+import { PracticeModule } from './modules/practice/practice.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { VocabularyModule } from './modules/vocabulary/vocabulary.module';
     MeModule,
     VocabularyModule,
     ReviewsModule,
+    PracticeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

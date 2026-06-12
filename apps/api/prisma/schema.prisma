@@ -61,6 +61,13 @@ enum ReviewRating {
   EASY
 }
 
+enum PracticeMode {
+  FLASHCARD
+  TYPING
+  MULTIPLE_CHOICE
+  OTHER
+}
+
 model User {
   id              String     @id @default(cuid())
   email           String     @unique
@@ -78,6 +85,7 @@ model User {
   createdVocabularyItems VocabularyItem[]   @relation("VocabularyItemCreator")
   userWords              UserWord[]
   reviewLogs             ReviewLog[]
+  practiceLogs           PracticeLog[]
 }
 
 model UserProfile {
@@ -192,6 +200,7 @@ model VocabularyItem {
   examples      VocabularyExample[]
   userWords     UserWord[]
   reviewLogs    ReviewLog[]
+  practiceLogs  PracticeLog[]
 
   @@unique([languagePairId, sourceNormalized, targetNormalized])
   @@index([languagePairId])
@@ -232,6 +241,7 @@ model UserWord {
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
   reviewLogs     ReviewLog[]
+  practiceLogs   PracticeLog[]
 
   @@unique([userId, vocabularyItemId])
   @@index([userId])
@@ -257,4 +267,23 @@ model ReviewLog {
   @@index([userWordId])
   @@index([vocabularyItemId])
   @@index([answeredAt])
+}
+
+model PracticeLog {
+  id               String       @id @default(cuid())
+  userId           String
+  userWordId       String
+  vocabularyItemId String
+  practiceMode     PracticeMode @default(FLASHCARD)
+  isCorrect        Boolean
+  answeredAt       DateTime     @default(now())
+  createdAt        DateTime     @default(now())
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userWord       UserWord       @relation(fields: [userWordId], references: [id], onDelete: Cascade)
+  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+
+  @@index([userId, answeredAt])
+  @@index([userWordId, answeredAt])
+  @@index([vocabularyItemId, answeredAt])
 }

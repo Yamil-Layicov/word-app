@@ -8,9 +8,8 @@
  * - AuthTokenService unit test token logic-i qoruyur.
  * - Bu test isə real HTTP auth behavior-u qoruyur.
  *
- * Vacib qeyd:
- * - `POST /auth/register` token qaytarmağa məcbur deyil.
- * - Token lazım olan testlərdə əvvəl register edirik, sonra login edib token götürürük.
+ * Bu versiyada response helper-lər `test/helpers/response.helpers.ts` faylından import olunur.
+ * Məqsəd eyni helper-ləri hər test faylında təkrar yazmamaqdır.
  */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -18,11 +17,12 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
-
-type AuthResponseBody = {
-  accessToken: string;
-  refreshToken: string;
-};
+import {
+  expectAuthResponseBody,
+  expectObject,
+  expectStringField,
+  type AuthResponseBody,
+} from './helpers/response.helpers';
 
 type AuthResponseWithEmail = AuthResponseBody & {
   email: string;
@@ -34,63 +34,11 @@ type MeResponseBody = {
 };
 
 /**
- * Supertest `response.body` dəyərini object kimi yoxlayırıq.
- *
- * Niyə helper?
- * - Testdə `any` ilə işləməyək.
- * - Response shape-i daha aydın yoxlayaq.
- */
-function expectObject(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Expected response body to be an object');
-  }
-
-  return value as Record<string, unknown>;
-}
-
-/**
- * Response object içindən string field oxuyur.
- *
- * Niyə helper?
- * - `accessToken`, `refreshToken`, `email` kimi field-lərin həqiqətən string olduğunu yoxlayırıq.
- * - Testlərdə təkrar type-check yazmırıq.
- */
-function expectStringField(
-  object: Record<string, unknown>,
-  fieldName: string,
-): string {
-  const value = object[fieldName];
-
-  if (typeof value !== 'string') {
-    throw new Error(`Expected "${fieldName}" to be a string`);
-  }
-
-  expect(value.length).toBeGreaterThan(0);
-
-  return value;
-}
-
-/**
- * Auth response body-ni token response formatına çevirir.
- *
- * Niyə helper?
- * - Login/Refresh token response qaytarır.
- * - Hər testdə accessToken/refreshToken yoxlamasını təkrarlamırıq.
- */
-function expectAuthResponseBody(value: unknown): AuthResponseBody {
-  const body = expectObject(value);
-
-  return {
-    accessToken: expectStringField(body, 'accessToken'),
-    refreshToken: expectStringField(body, 'refreshToken'),
-  };
-}
-
-/**
  * /auth/me response body-ni yoxlayır.
  *
  * Niyə helper?
  * - Protected endpoint-in user identity qaytardığını yoxlayırıq.
+ * - Common helper-lər sadə field oxuma işini görür, bu helper isə Auth-a aid response shape-i yığır.
  */
 function expectMeResponseBody(value: unknown): MeResponseBody {
   const body = expectObject(value);
@@ -376,6 +324,17 @@ describe('AuthController (e2e)', () => {
 
   /**
    * /auth/me token olmadan protected olmalıdır.
+   */
+  it('should reject /auth/me without access token', async () => {
+    await request(app.getHttpServer()).get('/auth/me').expect(401);
+  });
+
+  /**
+   * /auth/me invalid access token ilə də reject olunmalıdır.
+   *
+   * Niyə lazımdır?
+   * - Bu test AccessTokenGuard-ın token verify zamanı error aldıqda 401 qaytardığını qoruyur.
+   * - Header var, amma token yanlışdırsa user authenticated sayılmamalıdır.
    */
   it('should reject /auth/me with invalid access token', async () => {
     await request(app.getHttpServer())

@@ -7,6 +7,8 @@
  * - VocabularyController, DTO validation, AccessTokenGuard, Service, Repository və Prisma birlikdə yoxlanır.
  * - Burada əsas məqsəd user-in vocabulary library flow-unun real API üzərindən işlədiyini qorumaqdır.
  *
+ * Bu versiyada ümumi response helper-lər `test/helpers/response.helpers.ts` faylından import olunur.
+ *
  * Vacib response shape:
  * - `id` top-level VocabularyItem id-dir.
  * - `userWord.id` UserWord id-dir.
@@ -24,11 +26,14 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
-
-type AuthResponseBody = {
-  accessToken: string;
-  refreshToken: string;
-};
+import {
+  expectAuthResponseBody,
+  expectBooleanField,
+  expectNullableStringField,
+  expectNumberField,
+  expectObject,
+  expectStringField,
+} from './helpers/response.helpers';
 
 type VocabularyExampleResponseBody = {
   id: string;
@@ -70,118 +75,6 @@ type VocabularyListResponseBody = {
   items: VocabularyItemResponseBody[];
   nextCursor: string | null;
 };
-
-/**
- * Supertest response body-ni object kimi yoxlayırıq.
- *
- * Niyə helper?
- * - `any` istifadə etməyək.
- * - Response shape səhv olsa test daha aydın fail versin.
- */
-function expectObject(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Expected response body to be an object');
-  }
-
-  return value as Record<string, unknown>;
-}
-
-/**
- * Response object içindən string field oxuyur.
- *
- * Niyə helper?
- * - `accessToken`, `id`, `sourceText` kimi field-lərin həqiqətən string olduğunu yoxlayırıq.
- */
-function expectStringField(
-  object: Record<string, unknown>,
-  fieldName: string,
-): string {
-  const value = object[fieldName];
-
-  if (typeof value !== 'string') {
-    throw new Error(`Expected "${fieldName}" to be a string`);
-  }
-
-  expect(value.length).toBeGreaterThan(0);
-
-  return value;
-}
-
-/**
- * Response object içindən nullable string field oxuyur.
- *
- * Niyə helper?
- * - `definition`, `note`, `nextReviewAt` kimi field-lər string və ya null ola bilər.
- */
-function expectNullableStringField(
-  object: Record<string, unknown>,
-  fieldName: string,
-): string | null {
-  const value = object[fieldName];
-
-  if (value === null) {
-    return null;
-  }
-
-  if (typeof value !== 'string') {
-    throw new Error(`Expected "${fieldName}" to be a string or null`);
-  }
-
-  return value;
-}
-
-/**
- * Response object içindən boolean field oxuyur.
- *
- * Niyə helper?
- * - `isFavorite`, `isActive` kimi field-lərin həqiqətən boolean olduğunu yoxlayırıq.
- */
-function expectBooleanField(
-  object: Record<string, unknown>,
-  fieldName: string,
-): boolean {
-  const value = object[fieldName];
-
-  if (typeof value !== 'boolean') {
-    throw new Error(`Expected "${fieldName}" to be a boolean`);
-  }
-
-  return value;
-}
-
-/**
- * Response object içindən number field oxuyur.
- *
- * Niyə helper?
- * - UserWord statistikalarının həqiqətən number olduğunu yoxlayırıq.
- */
-function expectNumberField(
-  object: Record<string, unknown>,
-  fieldName: string,
-): number {
-  const value = object[fieldName];
-
-  if (typeof value !== 'number') {
-    throw new Error(`Expected "${fieldName}" to be a number`);
-  }
-
-  return value;
-}
-
-/**
- * Auth response body-ni access/refresh token formatına çevirir.
- *
- * Niyə helper?
- * - Login response-da token-lərin mövcudluğunu təkrar-təkrar yoxlamayaq.
- */
-function expectAuthResponseBody(value: unknown): AuthResponseBody {
-  const body = expectObject(value);
-
-  return {
-    accessToken: expectStringField(body, 'accessToken'),
-    refreshToken: expectStringField(body, 'refreshToken'),
-  };
-}
 
 /**
  * Vocabulary example response body-ni yoxlayır.

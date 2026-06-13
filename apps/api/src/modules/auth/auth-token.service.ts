@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
-import type { UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import { ClockService } from '../../common/time/clock.service';
 
@@ -187,10 +187,19 @@ export class AuthTokenService {
 
     const payload = value as Partial<AccessTokenPayload>;
 
+    /**
+     * Role sadəcə string olmamalıdır.
+     * JWT payload içində "HACKER" kimi unknown role gəlsə, onu valid saymamalıyıq.
+     * Ona görə role runtime-da real Prisma UserRole enum dəyərlərindən biri olmalıdır.
+     */
+    const isValidRole =
+      typeof payload.role === 'string' &&
+      Object.values(UserRole).some((role) => role === payload.role);
+
     return (
       typeof payload.sub === 'string' &&
       typeof payload.email === 'string' &&
-      typeof payload.role === 'string'
+      isValidRole
     );
   }
 }

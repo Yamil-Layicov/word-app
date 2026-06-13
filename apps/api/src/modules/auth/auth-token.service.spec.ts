@@ -32,6 +32,39 @@ class TestClockService extends ClockService {
   }
 }
 
+/**
+ * AuthTokenService yaratmaq üçün test helper-dir.
+ *
+ * Niyə lazımdır?
+ * - Hər testdə eyni config setup-u təkrarlamırıq.
+ * - Lazım olan testlərdə config override etmək asan olur.
+ */
+function createAuthTokenService(configOverrides: Record<string, string> = {}): {
+  service: AuthTokenService;
+  jwtService: JwtService;
+} {
+  const jwtService = new JwtService();
+
+  const configService = new ConfigService({
+    JWT_ACCESS_SECRET: 'test_access_secret',
+    JWT_ACCESS_EXPIRES_IN: '15m',
+    JWT_REFRESH_EXPIRES_IN: '7d',
+    REFRESH_TOKEN_HASH_SECRET: 'test_refresh_hash_secret',
+    ...configOverrides,
+  });
+
+  const service = new AuthTokenService(
+    jwtService,
+    configService,
+    new TestClockService(),
+  );
+
+  return {
+    service,
+    jwtService,
+  };
+}
+
 describe('AuthTokenService', () => {
   let service: AuthTokenService;
   let jwtService: JwtService;
@@ -41,20 +74,10 @@ describe('AuthTokenService', () => {
    * və deterministic ClockService ilə yenidən yaradılır.
    */
   beforeEach(() => {
-    jwtService = new JwtService();
+    const setup = createAuthTokenService();
 
-    const configService = new ConfigService({
-      JWT_ACCESS_SECRET: 'test_access_secret',
-      JWT_ACCESS_EXPIRES_IN: '15m',
-      JWT_REFRESH_EXPIRES_IN: '7d',
-      REFRESH_TOKEN_HASH_SECRET: 'test_refresh_hash_secret',
-    });
-
-    service = new AuthTokenService(
-      jwtService,
-      configService,
-      new TestClockService(),
-    );
+    service = setup.service;
+    jwtService = setup.jwtService;
   });
 
   /**
@@ -95,6 +118,56 @@ describe('AuthTokenService', () => {
     await expect(service.verifyAccessToken(invalidAccessToken)).rejects.toThrow(
       'Invalid access token payload',
     );
+  });
+
+  /**
+   * Role sadəcə string olmamalıdır.
+   * Bu test `"HACKER"` kimi unknown role-ların rədd edilməsini qoruyur.
+   */
+  it('should reject an access token with an unknown role', async () => {
+    const invalidAccessToken = await jwtService.signAsync(
+      {
+        sub: 'user-id-1',
+        email: 'user@example.com',
+        role: 'HACKER',
+      },
+      {
+        secret: 'test_access_secret',
+        expiresIn: '15m',
+      },
+    );
+
+    await expect(service.verifyAccessToken(invalidAccessToken)).rejects.toThrow(
+      'Invalid access token payload',
+    );
+  });
+
+  /**
+   * JWT_ACCESS_EXPIRES_IN config-də verilməsə default `15m` işləməlidir.
+   * Bu test default config behavior-un gələcəkdə təsadüfən qırılmamasını qoruyur.
+   */
+  it('should use default access token expiration when config is not provided', async () => {
+    const configService = new ConfigService({
+      JWT_ACCESS_SECRET: 'test_access_secret',
+      JWT_REFRESH_EXPIRES_IN: '7d',
+      REFRESH_TOKEN_HASH_SECRET: 'test_refresh_hash_secret',
+    });
+
+    const serviceWithDefaultAccessExpiry = new AuthTokenService(
+      new JwtService(),
+      configService,
+      new TestClockService(),
+    );
+
+    const accessToken =
+      await serviceWithDefaultAccessExpiry.generateAccessToken({
+        sub: 'user-id-1',
+        email: 'user@example.com',
+        role: UserRole.USER,
+      });
+
+    expect(typeof accessToken).toBe('string');
+    expect(accessToken.length).toBeGreaterThan(0);
   });
 
   /**

@@ -10,6 +10,12 @@ export class LanguageRepository {
       where: {
         isActive: true,
       },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        nativeName: true,
+      },
       orderBy: {
         name: 'asc',
       },

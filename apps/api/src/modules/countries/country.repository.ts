@@ -10,6 +10,12 @@ export class CountryRepository {
       where: {
         isActive: true,
       },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        emoji: true,
+      },
       orderBy: {
         name: 'asc',
       },

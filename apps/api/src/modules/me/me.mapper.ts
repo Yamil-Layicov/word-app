@@ -1,9 +1,30 @@
 import type {
+  MeLanguageModel,
+  MeLanguagePairModel,
   MeLanguagePairsModel,
   MeLanguagePairsResponse,
   MeProfileResponse,
   MeProfileResponseModel,
 } from './me.types';
+
+function toMeLanguageResponse(language: MeLanguageModel): MeLanguageModel {
+  return {
+    id: language.id,
+    code: language.code,
+    name: language.name,
+    nativeName: language.nativeName,
+  };
+}
+
+function toMeLanguagePairResponse(
+  languagePair: MeLanguagePairModel,
+): MeLanguagePairModel {
+  return {
+    id: languagePair.id,
+    sourceLanguage: toMeLanguageResponse(languagePair.sourceLanguage),
+    targetLanguage: toMeLanguageResponse(languagePair.targetLanguage),
+  };
+}
 
 export function toMeProfileResponse(
   user: MeProfileResponseModel,
@@ -22,7 +43,9 @@ export function toMeProfileResponse(
           activeLanguagePairId: user.profile.activeLanguagePairId,
         }
       : null,
-    activeLanguagePair: user.activeLanguagePair,
+    activeLanguagePair: user.activeLanguagePair
+      ? toMeLanguagePairResponse(user.activeLanguagePair)
+      : null,
     createdAt: user.createdAt,
   };
 }
@@ -33,7 +56,7 @@ export function toMeLanguagePairsResponse(
   return input.languagePairs.map((userLanguagePair) => ({
     id: userLanguagePair.id,
     languagePairId: userLanguagePair.languagePairId,
-    languagePair: userLanguagePair.languagePair,
+    languagePair: toMeLanguagePairResponse(userLanguagePair.languagePair),
     isLearning: userLanguagePair.isLearning,
     targetCefrLevel: userLanguagePair.targetCefrLevel,
     isActive: userLanguagePair.languagePairId === input.activeLanguagePairId,

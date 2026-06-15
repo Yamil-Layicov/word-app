@@ -75,13 +75,9 @@ const practiceUserWordWithVocabularyItemSelect = {
 
 const practiceLogSelect = {
   id: true,
-  userId: true,
-  userWordId: true,
-  vocabularyItemId: true,
   practiceMode: true,
   isCorrect: true,
   answeredAt: true,
-  createdAt: true,
 } as const;
 
 @Injectable()

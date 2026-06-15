@@ -75,13 +75,9 @@ export type ListPracticeItemsResponse = {
 
 export type PracticeLogModel = {
   id: string;
-  userId: string;
-  userWordId: string;
-  vocabularyItemId: string;
   practiceMode: PracticeMode;
   isCorrect: boolean;
   answeredAt: Date;
-  createdAt: Date;
 };
 
 export type AnswerPracticeResult = {
@@ -90,12 +86,7 @@ export type AnswerPracticeResult = {
   vocabularyItem: PracticeVocabularyItemModel;
 };
 
-export type PracticeLogResponse = {
-  id: string;
-  practiceMode: PracticeMode;
-  isCorrect: boolean;
-  answeredAt: Date;
-};
+export type PracticeLogResponse = PracticeLogModel;
 
 export type AnswerPracticeResponse = {
   practiceLog: PracticeLogResponse;

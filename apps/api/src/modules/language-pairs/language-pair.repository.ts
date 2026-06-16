@@ -9,31 +9,10 @@ export class LanguagePairRepository {
     return this.prisma.languagePair.findMany({
       where: {
         isActive: true,
-        sourceLanguage: {
-          isActive: true,
-        },
-        targetLanguage: {
-          isActive: true,
-        },
       },
-      select: {
-        id: true,
-        sourceLanguage: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            nativeName: true,
-          },
-        },
-        targetLanguage: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            nativeName: true,
-          },
-        },
+      include: {
+        sourceLanguage: true,
+        targetLanguage: true,
       },
       orderBy: [
         {

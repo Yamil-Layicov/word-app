@@ -43,6 +43,8 @@ type AnswerReviewInput = {
   rating: ReviewRating;
   isCorrect: boolean;
   answeredAt: Date;
+  expectedReviewCount: number;
+  expectedNextReviewAt: Date | null;
   nextStatus: UserWordStatus;
   nextEaseFactor: number;
   nextIntervalDays: number;
@@ -347,21 +349,35 @@ export class ReviewsRepository {
         return null;
       }
 
-      const reviewLog = await tx.reviewLog.create({
-        data: {
-          userId: input.userId,
-          userWordId: reviewTarget.id,
-          vocabularyItemId: reviewTarget.vocabularyItem.id,
-          rating: input.rating,
-          isCorrect: input.isCorrect,
-          answeredAt: input.answeredAt,
-        },
-        select: reviewLogSelect,
-      });
-
-      const updatedUserWord = await tx.userWord.update({
+      const updateResult = await tx.userWord.updateMany({
         where: {
           id: reviewTarget.id,
+          userId: input.userId,
+          reviewCount: input.expectedReviewCount,
+          ...(input.expectedNextReviewAt === null
+            ? {
+                nextReviewAt: null,
+              }
+            : {
+                nextReviewAt: input.expectedNextReviewAt,
+              }),
+          status: {
+            not: UserWordStatus.ARCHIVED,
+          },
+          OR: [
+            {
+              nextReviewAt: null,
+            },
+            {
+              nextReviewAt: {
+                lte: input.answeredAt,
+              },
+            },
+          ],
+          vocabularyItem: {
+            languagePairId: input.languagePairId,
+            isActive: true,
+          },
         },
         data: {
           status: input.nextStatus,
@@ -383,7 +399,33 @@ export class ReviewsRepository {
           lastReviewedAt: input.answeredAt,
           nextReviewAt: input.nextReviewAt,
         },
+      });
+
+      if (updateResult.count === 0) {
+        return null;
+      }
+
+      const updatedUserWord = await tx.userWord.findUnique({
+        where: {
+          id: reviewTarget.id,
+        },
         select: reviewUserWordSelect,
+      });
+
+      if (!updatedUserWord) {
+        return null;
+      }
+
+      const reviewLog = await tx.reviewLog.create({
+        data: {
+          userId: input.userId,
+          userWordId: reviewTarget.id,
+          vocabularyItemId: reviewTarget.vocabularyItem.id,
+          rating: input.rating,
+          isCorrect: input.isCorrect,
+          answeredAt: input.answeredAt,
+        },
+        select: reviewLogSelect,
       });
 
       return {

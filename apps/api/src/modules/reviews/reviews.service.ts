@@ -2,17 +2,17 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
-  InternalServerErrorException,
 } from '@nestjs/common';
 import { ReviewRating, UserStatus } from '@prisma/client';
 import { ClockService } from '../../common/time/clock.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { AnswerReviewDto } from './dto/answer-review.dto';
 import { GetDueReviewsQueryDto } from './dto/get-due-reviews-query.dto';
-import { GetReviewTimelineItemsQueryDto } from './dto/get-review-timeline-items-query.dto';
 import { GetReviewTimelineItemsParamDto } from './dto/get-review-timeline-items-param.dto';
+import { GetReviewTimelineItemsQueryDto } from './dto/get-review-timeline-items-query.dto';
 import { GetReviewTimelineQueryDto } from './dto/get-review-timeline-query.dto';
 import {
   toAnswerReviewResponse,
@@ -195,6 +195,8 @@ export class ReviewsService {
       rating: answerReviewDto.rating,
       isCorrect: answerReviewDto.isCorrect,
       answeredAt,
+      expectedReviewCount: reviewTarget.userWord.reviewCount,
+      expectedNextReviewAt: reviewTarget.userWord.nextReviewAt,
       nextStatus: nextReviewState.nextStatus,
       nextEaseFactor: nextReviewState.nextEaseFactor,
       nextIntervalDays: nextReviewState.nextIntervalDays,

@@ -7,8 +7,6 @@
  * - ReviewsController, DTO validation, AccessTokenGuard, ReviewsService,
  *   SpacedRepetitionService, ReviewsRepository və Prisma birlikdə yoxlanır.
  * - Burada əsas məqsəd official SRS review flow-un real API üzərindən düzgün işlədiyini qorumaqdır.
- *
- * Bu versiyada ümumi response helper-lər `test/helpers/response.helpers.ts` faylından import olunur.
  */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -262,11 +260,12 @@ describe('ReviewsController (e2e)', () => {
   let prisma: PrismaService;
 
   let languagePairId: string;
-  let sourceLanguageId: string;
-  let targetLanguageId: string;
   let accessToken: string;
 
-  const runId = `${Date.now()}`;
+  const runId = `${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+
   const email = `reviews-e2e-${runId}@example.com`;
   const password = 'password123';
 
@@ -319,35 +318,27 @@ describe('ReviewsController (e2e)', () => {
     prisma = app.get(PrismaService);
 
     /**
-     * Register üçün real language pair lazımdır.
-     * Ona görə test başlamazdan əvvəl source language, target language və language pair yaradırıq.
+     * Reviews testləri üçün mövcud active language pair-i public endpoint-dən götürürük.
+     *
+     * Niyə Prisma ilə yox?
+     * - Bu testin məqsədi ReviewsModule yoxlamaqdır.
+     * - Language / LanguagePair schema detallarına ilişmək istəmirik.
+     * - `/language-pairs` artıq public lookup endpoint kimi test olunub.
      */
-    const sourceLanguage = await prisma.language.create({
-      data: {
-        code: `reviews-e2e-src-${runId}`,
-        name: 'Reviews E2E Source',
-        nativeName: 'Reviews E2E Source',
-      },
-    });
+    const languagePairsResponse = await request(app.getHttpServer())
+      .get('/language-pairs')
+      .expect(200);
 
-    const targetLanguage = await prisma.language.create({
-      data: {
-        code: `reviews-e2e-tgt-${runId}`,
-        name: 'Reviews E2E Target',
-        nativeName: 'Reviews E2E Target',
-      },
-    });
+    const languagePairs = languagePairsResponse.body as unknown;
 
-    const languagePair = await prisma.languagePair.create({
-      data: {
-        sourceLanguageId: sourceLanguage.id,
-        targetLanguageId: targetLanguage.id,
-      },
-    });
+    if (!Array.isArray(languagePairs) || languagePairs.length === 0) {
+      throw new Error(
+        'No active language pair found for reviews e2e test. Seed lookup data before running this test.',
+      );
+    }
 
-    sourceLanguageId = sourceLanguage.id;
-    targetLanguageId = targetLanguage.id;
-    languagePairId = languagePair.id;
+    const firstLanguagePair = expectObject(languagePairs[0]);
+    languagePairId = expectStringField(firstLanguagePair, 'id');
 
     /**
      * Reviews endpoint-ləri protected-dir.
@@ -378,31 +369,13 @@ describe('ReviewsController (e2e)', () => {
 
   afterAll(async () => {
     /**
-     * Test data təmizlənir.
+     * Cleanup-u burada qəsdən sadə saxlayırıq.
      *
-     * User silinəndə UserWord, ReviewLog, PracticeLog cascade ilə silinir.
-     * LanguagePair silinəndə VocabularyItem-lər cascade ilə silinir.
+     * Səbəb:
+     * - Bu testdə yaradılan email/sourceText-lər runId ilə unique-dir.
+     * - Əl ilə cleanup schema FK-ları ilə ilişir.
+     * - Cleanup helper ayrıca refactor mərhələsində mərkəzləşdiriləcək.
      */
-    await prisma.user.deleteMany({
-      where: {
-        email,
-      },
-    });
-
-    await prisma.languagePair.deleteMany({
-      where: {
-        id: languagePairId,
-      },
-    });
-
-    await prisma.language.deleteMany({
-      where: {
-        id: {
-          in: [sourceLanguageId, targetLanguageId],
-        },
-      },
-    });
-
     await app.close();
   });
 
@@ -433,14 +406,6 @@ describe('ReviewsController (e2e)', () => {
 
   /**
    * GOOD + correct answer official SRS state-i update etməlidir.
-   *
-   * Gözlənilən nəticə:
-   * - status REVIEWING
-   * - reviewCount 1
-   * - correctCount 1
-   * - wrongCount 0
-   * - nextReviewAt null olmamalıdır
-   * - ReviewLog yaranmalıdır
    */
   it('should answer a due review item', async () => {
     const vocabularyItem = await createVocabularyItem('answer-good');
@@ -469,8 +434,61 @@ describe('ReviewsController (e2e)', () => {
   });
 
   /**
+   * Eyni due UserWord üçün iki paralel answer request gəlsə, yalnız biri qəbul olunmalıdır.
+   */
+  it('should accept only one parallel answer for the same due review item', async () => {
+    const vocabularyItem = await createVocabularyItem('parallel-answer');
+
+    const firstRequest = request(app.getHttpServer())
+      .post('/reviews/answer')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        userWordId: vocabularyItem.userWord.id,
+        rating: ReviewRating.GOOD,
+        isCorrect: true,
+      });
+
+    const secondRequest = request(app.getHttpServer())
+      .post('/reviews/answer')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        userWordId: vocabularyItem.userWord.id,
+        rating: ReviewRating.GOOD,
+        isCorrect: true,
+      });
+
+    const responses = await Promise.all([firstRequest, secondRequest]);
+    const statuses = responses.map((response) => response.status).sort();
+
+    expect(statuses).toEqual([201, 404]);
+
+    const reviewLogCount = await prisma.reviewLog.count({
+      where: {
+        userWordId: vocabularyItem.userWord.id,
+      },
+    });
+
+    expect(reviewLogCount).toBe(1);
+
+    const updatedUserWord = await prisma.userWord.findUnique({
+      where: {
+        id: vocabularyItem.userWord.id,
+      },
+      select: {
+        reviewCount: true,
+        correctCount: true,
+        wrongCount: true,
+      },
+    });
+
+    expect(updatedUserWord).not.toBeNull();
+    expect(updatedUserWord?.reviewCount).toBe(1);
+    expect(updatedUserWord?.correctCount).toBe(1);
+    expect(updatedUserWord?.wrongCount).toBe(0);
+  });
+
+  /**
    * isCorrect=false olduqda rating AGAIN olmalıdır.
-   * EASY + false kombinasiyası DTO/service validation ilə reject olunmalıdır.
    */
   it('should reject invalid incorrect answer rating combination', async () => {
     const vocabularyItem = await createVocabularyItem('invalid-combo-false');
@@ -488,7 +506,6 @@ describe('ReviewsController (e2e)', () => {
 
   /**
    * isCorrect=true olduqda rating AGAIN olmamalıdır.
-   * AGAIN + true kombinasiyası reject olunmalıdır.
    */
   it('should reject invalid correct answer rating combination', async () => {
     const vocabularyItem = await createVocabularyItem('invalid-combo-true');
@@ -548,7 +565,6 @@ describe('ReviewsController (e2e)', () => {
 
   /**
    * Timeline scheduled review group-ları qaytarmalıdır.
-   * Yeni UserWord nextReviewAt=null olduğu üçün bugün timeline-a düşməlidir.
    */
   it('should return review timeline groups', async () => {
     await createVocabularyItem('timeline');

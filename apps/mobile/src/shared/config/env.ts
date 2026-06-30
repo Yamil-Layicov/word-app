@@ -13,3 +13,4 @@ function normalizeApiUrl(value: string | undefined) {
 export const env = {
   apiUrl: normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL),
 } as const;
+

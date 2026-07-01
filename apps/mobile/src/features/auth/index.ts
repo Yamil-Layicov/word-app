@@ -1,7 +1,9 @@
-export { login, register } from "./api";
+export { getCurrentUser, login, register } from "./api";
+export { authQueryKeys } from "./query-keys";
 export { useLogin } from "./hooks/useLogin";
 export { useLogout } from "./hooks/useLogout";
 export { useRegister } from "./hooks/useRegister";
+export { useCurrentUserQuery } from "./queries";
 export {
   clearRegisterDraft,
   getRegisterDraft,

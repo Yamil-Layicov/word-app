@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
-import { useLogout } from "@/features/auth";
+import { useCurrentUserQuery, useLogout } from "@/features/auth";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { appBrand } from "@/shared/config/brand";
 import { colors, spacing, typography } from "@/shared/theme";
@@ -10,11 +10,15 @@ import { Button } from "@/shared/ui";
 export default function AppHomeRoute() {
   const logout = useLogout();
   const router = useRouter();
+  const currentUserQuery = useCurrentUserQuery();
 
   const handleLogout = () => {
     logout();
     router.replace("/login");
   };
+
+  const displayName = currentUserQuery.data?.profile?.displayName;
+  const userLabel = displayName || currentUserQuery.data?.email;
 
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm}>
@@ -23,7 +27,19 @@ export default function AppHomeRoute() {
           <Text style={styles.logoText}>W</Text>
         </View>
         <Text style={styles.title}>{appBrand.name}</Text>
-        <Text style={styles.subtitle}>App shell placeholder</Text>
+        <Text style={styles.subtitle}>
+          {currentUserQuery.isLoading
+            ? "Loading your profile..."
+            : userLabel
+              ? `Signed in as ${userLabel}`
+              : "App shell placeholder"}
+        </Text>
+        {currentUserQuery.isError ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>Could not load your profile.</Text>
+            <Button title="Try again" variant="secondary" onPress={() => void currentUserQuery.refetch()} />
+          </View>
+        ) : null}
         <Button title="Log out" variant="secondary" style={styles.logoutButton} onPress={handleLogout} />
       </View>
     </ScreenContainer>
@@ -61,6 +77,18 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 15,
     fontWeight: typography.weights.medium,
+    textAlign: "center",
+  },
+  errorBox: {
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    alignItems: "center",
+  },
+  errorText: {
+    color: colors.error,
+    fontSize: 13,
+    fontWeight: typography.weights.medium,
+    textAlign: "center",
   },
   logoutButton: {
     marginTop: spacing.xl,

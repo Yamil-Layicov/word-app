@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useMeProfileQuery } from "@/entities/user";
 import { type UserLanguagePair, useMeLanguagePairsQuery } from "@/entities/user-language-pair";
 import { useAuthFailureRedirect } from "@/features/auth";
-import { useUpdateProfile } from "@/features/me";
+import { useSetActiveLanguagePair, useUpdateProfile } from "@/features/me";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
@@ -17,11 +17,20 @@ export function ProfileScreen() {
   const profileQuery = useMeProfileQuery();
   const languagePairsQuery = useMeLanguagePairsQuery();
   const updateProfileMutation = useUpdateProfile();
+  const setActiveLanguagePairMutation = useSetActiveLanguagePair();
   const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [displayNameError, setDisplayNameError] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | null>(null);
-  const authError = profileQuery.error ?? languagePairsQuery.error ?? updateProfileMutation.error;
+  const [languagePairNotice, setLanguagePairNotice] = useState<string | null>(null);
+  const [pendingActiveLanguagePairId, setPendingActiveLanguagePairId] = useState<string | null>(
+    null,
+  );
+  const authError =
+    profileQuery.error ??
+    languagePairsQuery.error ??
+    updateProfileMutation.error ??
+    setActiveLanguagePairMutation.error;
   const hasUnauthorizedError = useAuthFailureRedirect(authError);
 
   const profile = profileQuery.data;
@@ -78,6 +87,22 @@ export function ProfileScreen() {
       setNotice("Profile updated.");
     } catch (error) {
       setNotice(isApiError(error) ? error.message : "Could not update profile.");
+    }
+  };
+
+  const handleSetActiveLanguagePair = async (languagePairId: string) => {
+    setPendingActiveLanguagePairId(languagePairId);
+    setLanguagePairNotice(null);
+
+    try {
+      await setActiveLanguagePairMutation.mutateAsync({ languagePairId });
+      setLanguagePairNotice("Active language pair updated.");
+    } catch (error) {
+      setLanguagePairNotice(
+        isApiError(error) ? error.message : "Could not update active language pair.",
+      );
+    } finally {
+      setPendingActiveLanguagePairId(null);
     }
   };
 
@@ -172,6 +197,15 @@ export function ProfileScreen() {
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Language pairs</Text>
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          style={styles.addPairButton}
+          onPress={() => router.push("/profile/add-language-pair")}
+        >
+          <Ionicons name="add" size={18} color={colors.orange} />
+          <Text style={styles.addPairButtonText}>Add</Text>
+        </Pressable>
       </View>
 
       {languagePairsQuery.isLoading ? <StateBox title="Loading language pairs..." /> : null}
@@ -188,8 +222,25 @@ export function ProfileScreen() {
         <StateBox title="No language pairs added yet." />
       ) : null}
 
+      {languagePairNotice ? (
+        <Text
+          style={[
+            styles.languagePairNotice,
+            setActiveLanguagePairMutation.isError ? styles.noticeError : null,
+          ]}
+        >
+          {languagePairNotice}
+        </Text>
+      ) : null}
+
       {languagePairsQuery.data?.map((languagePair) => (
-        <LanguagePairRow key={languagePair.id} languagePair={languagePair} />
+        <LanguagePairRow
+          key={languagePair.id}
+          disabled={setActiveLanguagePairMutation.isPending}
+          isSettingActive={pendingActiveLanguagePairId === languagePair.languagePairId}
+          languagePair={languagePair}
+          onSetActive={() => void handleSetActiveLanguagePair(languagePair.languagePairId)}
+        />
       ))}
     </ScreenContainer>
   );
@@ -226,7 +277,19 @@ function StateBox({ title, actionTitle, onAction }: StateBoxProps) {
   );
 }
 
-function LanguagePairRow({ languagePair }: { languagePair: UserLanguagePair }) {
+type LanguagePairRowProps = {
+  disabled: boolean;
+  isSettingActive: boolean;
+  languagePair: UserLanguagePair;
+  onSetActive: () => void;
+};
+
+function LanguagePairRow({
+  disabled,
+  isSettingActive,
+  languagePair,
+  onSetActive,
+}: LanguagePairRowProps) {
   const pairLabel = `${languagePair.languagePair.sourceLanguage.name} -> ${languagePair.languagePair.targetLanguage.name}`;
 
   return (
@@ -244,7 +307,19 @@ function LanguagePairRow({ languagePair }: { languagePair: UserLanguagePair }) {
         <View style={styles.activeBadge}>
           <Text style={styles.activeBadgeText}>Active</Text>
         </View>
-      ) : null}
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled }}
+          disabled={disabled}
+          style={[styles.setActiveButton, disabled ? styles.setActiveButtonDisabled : null]}
+          onPress={onSetActive}
+        >
+          <Text style={styles.setActiveButtonText}>
+            {isSettingActive ? "Saving..." : "Set active"}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -369,11 +444,26 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginTop: spacing.xl,
     marginBottom: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
   },
   sectionTitle: {
     color: colors.navy,
     fontSize: 20,
     fontWeight: typography.weights.black,
+  },
+  addPairButton: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  addPairButtonText: {
+    color: colors.orange,
+    fontSize: 14,
+    fontWeight: typography.weights.bold,
   },
   stateBox: {
     borderRadius: radii.lg,
@@ -390,6 +480,14 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: typography.weights.bold,
     textAlign: "center",
+  },
+  languagePairNotice: {
+    color: colors.green,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: typography.weights.medium,
+    textAlign: "center",
+    marginBottom: spacing.md,
   },
   pairRow: {
     minHeight: 78,
@@ -436,6 +534,23 @@ const styles = StyleSheet.create({
   },
   activeBadgeText: {
     color: colors.white,
+    fontSize: 12,
+    fontWeight: typography.weights.bold,
+  },
+  setActiveButton: {
+    minHeight: 34,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.orange,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  setActiveButtonDisabled: {
+    opacity: 0.56,
+  },
+  setActiveButtonText: {
+    color: colors.orange,
     fontSize: 12,
     fontWeight: typography.weights.bold,
   },

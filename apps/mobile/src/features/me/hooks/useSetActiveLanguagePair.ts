@@ -5,14 +5,25 @@ import {
   userQueryKeys,
   type SetActiveLanguagePairRequest,
 } from "@/entities/user";
-import { userLanguagePairQueryKeys } from "@/entities/user-language-pair";
+import {
+  userLanguagePairQueryKeys,
+  type UserLanguagePair,
+} from "@/entities/user-language-pair";
 import { queryClient } from "@/shared/lib/query-client";
 
 export function useSetActiveLanguagePair() {
   return useMutation({
     mutationFn: (input: SetActiveLanguagePairRequest) => setActiveLanguagePair(input),
-    onSuccess: (profile) => {
+    onSuccess: (profile, input) => {
       queryClient.setQueryData(userQueryKeys.profile(), profile);
+      queryClient.setQueryData<UserLanguagePair[]>(
+        userLanguagePairQueryKeys.list(),
+        (current) =>
+          current?.map((languagePair) => ({
+            ...languagePair,
+            isActive: languagePair.languagePairId === input.languagePairId,
+          })),
+      );
       void queryClient.invalidateQueries({ queryKey: userLanguagePairQueryKeys.list() });
     },
   });

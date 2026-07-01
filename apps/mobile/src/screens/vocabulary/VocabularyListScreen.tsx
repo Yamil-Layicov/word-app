@@ -21,6 +21,14 @@ export function VocabularyListScreen() {
           <Ionicons name="chevron-back" size={20} color={colors.orange} />
           <Text style={styles.backText}>Back</Text>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.createLink}
+          onPress={() => router.push("/vocabulary/create")}
+        >
+          <Ionicons name="add" size={18} color={colors.orange} />
+          <Text style={styles.createLinkText}>Add</Text>
+        </Pressable>
       </View>
 
       <View style={styles.header}>
@@ -46,15 +54,29 @@ export function VocabularyListScreen() {
       ) : null}
 
       {items.map((item) => (
-        <VocabularyRow key={item.id} item={item} />
+        <VocabularyRow
+          key={item.id}
+          item={item}
+          onPress={() =>
+            router.push({
+              pathname: "/vocabulary/[id]",
+              params: { id: item.id },
+            })
+          }
+        />
       ))}
     </ScreenContainer>
   );
 }
 
-function VocabularyRow({ item }: { item: VocabularyItem }) {
+type VocabularyRowProps = {
+  item: VocabularyItem;
+  onPress: () => void;
+};
+
+function VocabularyRow({ item, onPress }: VocabularyRowProps) {
   return (
-    <View style={styles.row}>
+    <Pressable accessibilityRole="button" style={styles.row} onPress={onPress}>
       <View style={styles.rowIcon}>
         <Ionicons name="book-outline" size={21} color={colors.navy} />
       </View>
@@ -67,11 +89,12 @@ function VocabularyRow({ item }: { item: VocabularyItem }) {
         </View>
         <Text style={styles.targetText}>{item.targetText}</Text>
         <Text style={styles.metaText}>
-          {item.wordType.replace("_", " ").toLowerCase()} · {item.cefrLevel || "No level"} ·{" "}
+          {item.wordType.replace("_", " ").toLowerCase()} - {item.cefrLevel || "No level"} -{" "}
           {item.userWord.status.toLowerCase()}
         </Text>
       </View>
-    </View>
+      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+    </Pressable>
   );
 }
 
@@ -104,7 +127,10 @@ const styles = StyleSheet.create({
   },
   topBar: {
     minHeight: 40,
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
   },
   backButton: {
     flexDirection: "row",
@@ -114,6 +140,17 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   backText: {
+    color: colors.orange,
+    fontSize: 15,
+    fontWeight: typography.weights.bold,
+  },
+  createLink: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  createLinkText: {
     color: colors.orange,
     fontSize: 15,
     fontWeight: typography.weights.bold,

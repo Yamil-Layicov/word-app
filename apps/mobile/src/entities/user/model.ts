@@ -31,3 +31,9 @@ export type MeProfile = {
   activeLanguagePair: UserActiveLanguagePair | null;
   createdAt: string;
 };
+
+export type UpdateMeProfileRequest = {
+  displayName?: string;
+  countryCode?: string;
+  interfaceLanguage?: string;
+};

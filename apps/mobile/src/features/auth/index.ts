@@ -4,6 +4,7 @@ export { useLogin } from "./hooks/useLogin";
 export { useLogout } from "./hooks/useLogout";
 export { useRegister } from "./hooks/useRegister";
 export { useStartSession } from "./hooks/useStartSession";
+export { useAuthFailureRedirect } from "./hooks/useAuthFailureRedirect";
 export { useCurrentUserQuery } from "./queries";
 export {
   clearRegisterDraft,

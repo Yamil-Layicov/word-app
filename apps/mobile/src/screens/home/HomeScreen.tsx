@@ -1,11 +1,9 @@
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { useMeProfileQuery } from "@/entities/user";
 import { useMeLanguagePairsQuery } from "@/entities/user-language-pair";
-import { useLogout } from "@/features/auth";
-import { isApiError } from "@/shared/api/http-error";
+import { useAuthFailureRedirect, useLogout } from "@/features/auth";
 import { appBrand } from "@/shared/config/brand";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
@@ -24,16 +22,7 @@ export function HomeScreen() {
     ? `${activeLanguagePair.sourceLanguage.name} -> ${activeLanguagePair.targetLanguage.name}`
     : "No active language pair yet";
   const languagePairCount = languagePairsQuery.data?.length ?? 0;
-
-  const hasUnauthorizedError =
-    isApiError(profileQuery.error) && profileQuery.error.status === 401;
-
-  useEffect(() => {
-    if (hasUnauthorizedError) {
-      logout();
-      router.replace("/login");
-    }
-  }, [hasUnauthorizedError, logout, router]);
+  const hasUnauthorizedError = useAuthFailureRedirect(profileQuery.error);
 
   const handleLogout = () => {
     logout();
@@ -72,6 +61,7 @@ export function HomeScreen() {
           </View>
         ) : null}
 
+        <Button title="View profile" style={styles.profileButton} onPress={() => router.push("/profile")} />
         <Button title="Log out" variant="secondary" style={styles.logoutButton} onPress={handleLogout} />
       </View>
     </ScreenContainer>
@@ -154,8 +144,12 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
     textAlign: "center",
   },
-  logoutButton: {
+  profileButton: {
     marginTop: spacing.xl,
+    minWidth: 180,
+  },
+  logoutButton: {
+    marginTop: spacing.md,
     minWidth: 160,
   },
 });

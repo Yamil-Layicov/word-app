@@ -5,12 +5,16 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
+import { getRegisterDraft, saveRegisterLanguagePair } from "@/features/auth";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
 export function LanguagePairSelectionScreen() {
-  const [selectedLanguagePairId, setSelectedLanguagePairId] = useState<string | null>(null);
+  const registerDraft = getRegisterDraft();
+  const [selectedLanguagePairId, setSelectedLanguagePairId] = useState<string | null>(
+    registerDraft?.languagePairId ?? null,
+  );
   const [notice, setNotice] = useState<string | null>(null);
   const { data: languagePairs, isError, isLoading, refetch } = useLanguagePairsQuery();
 
@@ -19,12 +23,18 @@ export function LanguagePairSelectionScreen() {
   );
 
   const handleContinue = () => {
+    if (!registerDraft) {
+      setNotice("Start from the register screen first.");
+      return;
+    }
+
     if (!selectedLanguagePair) {
       setNotice("Choose a language pair to continue.");
       return;
     }
 
-    setNotice("Register integration will use this language pair next.");
+    saveRegisterLanguagePair(selectedLanguagePair.id);
+    setNotice("Ready to connect the register API next.");
   };
 
   return (

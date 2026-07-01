@@ -63,3 +63,23 @@ export type VocabularyItemsFilters = {
   limit?: number;
   cursor?: string;
 };
+
+export type CreateVocabularyExampleRequest = {
+  sourceSentence: string;
+  targetSentence: string;
+};
+
+export type CreateVocabularyItemRequest = {
+  sourceText: string;
+  targetText: string;
+  wordType?: WordType;
+  cefrLevel?: CefrLevel;
+  definition?: string;
+  note?: string;
+  examples?: CreateVocabularyExampleRequest[];
+};
+
+export type UpdateVocabularyItemRequest = {
+  isFavorite?: boolean;
+  status?: UserWordStatus;
+};

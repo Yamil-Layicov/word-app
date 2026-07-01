@@ -2,8 +2,7 @@ import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { setAccessToken } from "@/auth";
-import { useLogin } from "@/features/auth";
+import { useLogin, useStartSession } from "@/features/auth";
 import { isApiError } from "@/shared/api/http-error";
 import { AuthScreenScaffold } from "@/shared/layout/AuthScreenScaffold";
 import { colors, spacing, typography } from "@/shared/theme";
@@ -21,6 +20,7 @@ function isEmail(value: string) {
 export function LoginScreen() {
   const router = useRouter();
   const loginMutation = useLogin();
+  const startSession = useStartSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<LoginErrors>({});
@@ -52,7 +52,7 @@ export function LoginScreen() {
           password,
         });
 
-        setAccessToken(response.accessToken);
+        startSession(response);
         router.replace("/(app)");
       } catch (error) {
         setNoticeType("error");

@@ -5,13 +5,13 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
-import { setAccessToken } from "@/auth";
 import {
   clearRegisterDraft,
   getRegisterDraft,
   isCompleteRegisterDraft,
   saveRegisterLanguagePair,
   useRegister,
+  useStartSession,
 } from "@/features/auth";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
@@ -21,6 +21,7 @@ import { Button } from "@/shared/ui";
 export function LanguagePairSelectionScreen() {
   const router = useRouter();
   const registerMutation = useRegister();
+  const startSession = useStartSession();
   const registerDraft = getRegisterDraft();
   const [selectedLanguagePairId, setSelectedLanguagePairId] = useState<string | null>(
     registerDraft?.languagePairId ?? null,
@@ -60,7 +61,7 @@ export function LanguagePairSelectionScreen() {
         languagePairId: nextDraft.languagePairId,
       });
 
-      setAccessToken(response.accessToken);
+      startSession(response);
       clearRegisterDraft();
       router.replace("/(app)");
     } catch (error) {

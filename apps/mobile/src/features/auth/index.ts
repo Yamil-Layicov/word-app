@@ -3,6 +3,7 @@ export { authQueryKeys } from "./query-keys";
 export { useLogin } from "./hooks/useLogin";
 export { useLogout } from "./hooks/useLogout";
 export { useRegister } from "./hooks/useRegister";
+export { useStartSession } from "./hooks/useStartSession";
 export { useCurrentUserQuery } from "./queries";
 export {
   clearRegisterDraft,

@@ -1,7 +1,9 @@
 import { useRouter } from "expo-router";
+import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { useCurrentUserQuery, useLogout } from "@/features/auth";
+import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { appBrand } from "@/shared/config/brand";
 import { colors, spacing, typography } from "@/shared/theme";
@@ -19,6 +21,13 @@ export default function AppHomeRoute() {
 
   const displayName = currentUserQuery.data?.profile?.displayName;
   const userLabel = displayName || currentUserQuery.data?.email;
+
+  useEffect(() => {
+    if (isApiError(currentUserQuery.error) && currentUserQuery.error.status === 401) {
+      logout();
+      router.replace("/login");
+    }
+  }, [currentUserQuery.error, logout, router]);
 
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm}>

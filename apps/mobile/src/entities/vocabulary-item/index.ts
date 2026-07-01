@@ -6,7 +6,11 @@ export {
   updateVocabularyItem,
 } from "./api";
 export { vocabularyItemQueryKeys } from "./query-keys";
-export { useVocabularyItemQuery, useVocabularyItemsQuery } from "./queries";
+export {
+  useInfiniteVocabularyItemsQuery,
+  useVocabularyItemQuery,
+  useVocabularyItemsQuery,
+} from "./queries";
 export type {
   CefrLevel,
   CreateVocabularyExampleRequest,

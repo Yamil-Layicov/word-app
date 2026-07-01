@@ -3,27 +3,47 @@ import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { type VocabularyItem, useVocabularyItemsQuery } from "@/entities/vocabulary-item";
+import {
+  type UserWordStatus,
+  type VocabularyItem,
+  useInfiniteVocabularyItemsQuery,
+} from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button, TextField } from "@/shared/ui";
 
+type VisibleUserWordStatus = Exclude<UserWordStatus, "ARCHIVED">;
+type VocabularyListFilter = "ALL" | "FAVORITES" | VisibleUserWordStatus;
+
+const FILTER_OPTIONS: { label: string; value: VocabularyListFilter }[] = [
+  { label: "All", value: "ALL" },
+  { label: "Favorites", value: "FAVORITES" },
+  { label: "New", value: "NEW" },
+  { label: "Learning", value: "LEARNING" },
+  { label: "Reviewing", value: "REVIEWING" },
+  { label: "Mastered", value: "MASTERED" },
+];
+
 export function VocabularyListScreen() {
   const router = useRouter();
   const [searchText, setSearchText] = useState("");
+  const [activeFilter, setActiveFilter] = useState<VocabularyListFilter>("ALL");
   const vocabularyFilters = useMemo(() => {
     const search = searchText.trim();
 
     return {
       limit: 20,
       ...(search ? { search } : {}),
+      ...(activeFilter === "FAVORITES" ? { isFavorite: true } : {}),
+      ...(isStatusFilter(activeFilter) ? { status: activeFilter } : {}),
     };
-  }, [searchText]);
-  const vocabularyQuery = useVocabularyItemsQuery(vocabularyFilters);
+  }, [activeFilter, searchText]);
+  const vocabularyQuery = useInfiniteVocabularyItemsQuery(vocabularyFilters);
   const hasUnauthorizedError = useAuthFailureRedirect(vocabularyQuery.error);
-  const items = vocabularyQuery.data?.items ?? [];
+  const items = vocabularyQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const hasSearch = searchText.trim().length > 0;
+  const hasActiveFilter = activeFilter !== "ALL";
 
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
@@ -73,6 +93,17 @@ export function VocabularyListScreen() {
         />
       </View>
 
+      <View style={styles.filterGrid}>
+        {FILTER_OPTIONS.map((option) => (
+          <FilterChip
+            key={option.value}
+            label={option.label}
+            selected={activeFilter === option.value}
+            onPress={() => setActiveFilter(option.value)}
+          />
+        ))}
+      </View>
+
       {vocabularyQuery.isLoading ? <StateBox title="Loading vocabulary..." /> : null}
 
       {vocabularyQuery.isError && !hasUnauthorizedError ? (
@@ -84,7 +115,9 @@ export function VocabularyListScreen() {
       ) : null}
 
       {!vocabularyQuery.isLoading && !vocabularyQuery.isError && items.length === 0 ? (
-        <StateBox title={hasSearch ? "No words found." : "No words added yet."} />
+        <StateBox
+          title={hasSearch || hasActiveFilter ? "No words match these filters." : "No words added yet."}
+        />
       ) : null}
 
       {items.map((item) => (
@@ -99,7 +132,41 @@ export function VocabularyListScreen() {
           }
         />
       ))}
+
+      {vocabularyQuery.hasNextPage && !vocabularyQuery.isError ? (
+        <Button
+          disabled={vocabularyQuery.isFetchingNextPage}
+          loading={vocabularyQuery.isFetchingNextPage}
+          title="Load more"
+          variant="secondary"
+          style={styles.loadMoreButton}
+          onPress={() => {
+            void vocabularyQuery.fetchNextPage();
+          }}
+        />
+      ) : null}
     </ScreenContainer>
+  );
+}
+
+type FilterChipProps = {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+};
+
+function FilterChip({ label, selected, onPress }: FilterChipProps) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={[styles.filterChip, selected ? styles.filterChipSelected : null]}
+      onPress={onPress}
+    >
+      <Text style={[styles.filterChipText, selected ? styles.filterChipTextSelected : null]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -147,6 +214,10 @@ function StateBox({ title, actionTitle, onAction }: StateBoxProps) {
       ) : null}
     </View>
   );
+}
+
+function isStatusFilter(value: VocabularyListFilter): value is VisibleUserWordStatus {
+  return value !== "ALL" && value !== "FAVORITES";
 }
 
 const styles = StyleSheet.create({
@@ -219,7 +290,35 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   searchBox: {
+    marginBottom: spacing.md,
+  },
+  filterGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
     marginBottom: spacing.lg,
+  },
+  filterChip: {
+    minHeight: 36,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  filterChipSelected: {
+    borderColor: colors.green,
+    backgroundColor: colors.green,
+  },
+  filterChipText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: typography.weights.bold,
+  },
+  filterChipTextSelected: {
+    color: colors.white,
   },
   row: {
     minHeight: 92,
@@ -232,6 +331,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
     marginBottom: spacing.md,
+  },
+  loadMoreButton: {
+    marginTop: spacing.sm,
   },
   rowIcon: {
     width: 44,

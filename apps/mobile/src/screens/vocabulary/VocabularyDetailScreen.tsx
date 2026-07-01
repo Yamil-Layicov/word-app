@@ -3,13 +3,15 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { useVocabularyItemQuery } from "@/entities/vocabulary-item";
+import { type UserWordStatus, useVocabularyItemQuery } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
 import { useArchiveVocabularyItem, useUpdateVocabularyItem } from "@/features/vocabulary";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
+
+const STATUS_OPTIONS: UserWordStatus[] = ["NEW", "LEARNING", "REVIEWING", "MASTERED"];
 
 export function VocabularyDetailScreen() {
   const router = useRouter();
@@ -44,6 +46,26 @@ export function VocabularyDetailScreen() {
     } catch (error) {
       if (!isApiError(error) || error.status !== 401) {
         setNotice(isApiError(error) ? error.message : "Could not update favorite.");
+      }
+    }
+  };
+
+  const handleChangeStatus = async (nextStatus: UserWordStatus) => {
+    if (!item || item.userWord.status === nextStatus) {
+      return;
+    }
+
+    setNotice(null);
+
+    try {
+      await updateVocabularyItemMutation.mutateAsync({
+        id: item.id,
+        data: { status: nextStatus },
+      });
+      setNotice(`Status changed to ${formatStatusLabel(nextStatus)}.`);
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(isApiError(error) ? error.message : "Could not update status.");
       }
     }
   };
@@ -149,6 +171,23 @@ export function VocabularyDetailScreen() {
             </Text>
           ) : null}
 
+          <View style={styles.statusCard}>
+            <Text style={styles.statusTitle}>Learning status</Text>
+            <View style={styles.statusGrid}>
+              {STATUS_OPTIONS.map((status) => (
+                <StatusButton
+                  key={status}
+                  disabled={isMutating}
+                  label={formatStatusLabel(status)}
+                  selected={item.userWord.status === status}
+                  onPress={() => {
+                    void handleChangeStatus(status);
+                  }}
+                />
+              ))}
+            </View>
+          </View>
+
           <View style={styles.card}>
             <InfoRow label="Definition" value={item.definition || "Not set"} />
             <InfoRow label="Note" value={item.note || "Not set"} />
@@ -189,6 +228,33 @@ export function VocabularyDetailScreen() {
   );
 }
 
+type StatusButtonProps = {
+  disabled: boolean;
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+};
+
+function StatusButton({ disabled, label, selected, onPress }: StatusButtonProps) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: disabled || selected, selected }}
+      disabled={disabled || selected}
+      style={[
+        styles.statusButton,
+        selected ? styles.statusButtonSelected : null,
+        disabled ? styles.statusButtonDisabled : null,
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[styles.statusButtonText, selected ? styles.statusButtonTextSelected : null]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 type InfoRowProps = {
   label: string;
   value: string;
@@ -226,6 +292,13 @@ function formatOptionalDate(value: string | null) {
   }
 
   return new Date(value).toLocaleDateString();
+}
+
+function formatStatusLabel(value: UserWordStatus) {
+  return value
+    .split("_")
+    .map((part) => part.slice(0, 1) + part.slice(1).toLowerCase())
+    .join(" ");
 }
 
 const styles = StyleSheet.create({
@@ -329,6 +402,51 @@ const styles = StyleSheet.create({
   },
   noticeError: {
     color: colors.error,
+  },
+  statusCard: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundSoft,
+    padding: spacing.lg,
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  statusTitle: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: typography.weights.black,
+  },
+  statusGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  statusButton: {
+    minHeight: 38,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  statusButtonSelected: {
+    borderColor: colors.green,
+    backgroundColor: colors.green,
+  },
+  statusButtonDisabled: {
+    opacity: 0.64,
+  },
+  statusButtonText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: typography.weights.bold,
+  },
+  statusButtonTextSelected: {
+    color: colors.white,
   },
   card: {
     borderRadius: radii.lg,

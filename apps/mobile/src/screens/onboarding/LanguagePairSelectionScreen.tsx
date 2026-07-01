@@ -1,16 +1,26 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
-import { getRegisterDraft, saveRegisterLanguagePair } from "@/features/auth";
+import { setAccessToken } from "@/auth";
+import {
+  clearRegisterDraft,
+  getRegisterDraft,
+  isCompleteRegisterDraft,
+  saveRegisterLanguagePair,
+  useRegister,
+} from "@/features/auth";
+import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
 export function LanguagePairSelectionScreen() {
+  const router = useRouter();
+  const registerMutation = useRegister();
   const registerDraft = getRegisterDraft();
   const [selectedLanguagePairId, setSelectedLanguagePairId] = useState<string | null>(
     registerDraft?.languagePairId ?? null,
@@ -22,7 +32,7 @@ export function LanguagePairSelectionScreen() {
     (languagePair) => languagePair.id === selectedLanguagePairId,
   );
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!registerDraft) {
       setNotice("Start from the register screen first.");
       return;
@@ -33,8 +43,29 @@ export function LanguagePairSelectionScreen() {
       return;
     }
 
-    saveRegisterLanguagePair(selectedLanguagePair.id);
-    setNotice("Ready to connect the register API next.");
+    const nextDraft = saveRegisterLanguagePair(selectedLanguagePair.id);
+
+    if (!isCompleteRegisterDraft(nextDraft)) {
+      setNotice("Start from the register screen first.");
+      return;
+    }
+
+    setNotice(null);
+
+    try {
+      const response = await registerMutation.mutateAsync({
+        email: nextDraft.email,
+        password: nextDraft.password,
+        displayName: nextDraft.displayName,
+        languagePairId: nextDraft.languagePairId,
+      });
+
+      setAccessToken(response.accessToken);
+      clearRegisterDraft();
+      router.replace("/(app)");
+    } catch (error) {
+      setNotice(isApiError(error) ? error.message : "Could not create your account.");
+    }
   };
 
   return (
@@ -88,8 +119,9 @@ export function LanguagePairSelectionScreen() {
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       <Button
-        disabled={!selectedLanguagePair}
-        title="Continue"
+        disabled={!selectedLanguagePair || registerMutation.isPending}
+        loading={registerMutation.isPending}
+        title="Create account"
         onPress={handleContinue}
       />
     </ScreenContainer>

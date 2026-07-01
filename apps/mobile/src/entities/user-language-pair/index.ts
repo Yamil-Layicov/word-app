@@ -1,7 +1,8 @@
-export { listMeLanguagePairs } from "./api";
+export { addMeLanguagePair, listMeLanguagePairs } from "./api";
 export { userLanguagePairQueryKeys } from "./query-keys";
 export { useMeLanguagePairsQuery } from "./queries";
 export type {
+  AddMeLanguagePairRequest,
   CefrLevel,
   UserLanguagePair,
   UserLanguagePairDetails,

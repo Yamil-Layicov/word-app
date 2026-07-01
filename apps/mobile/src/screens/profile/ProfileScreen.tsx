@@ -1,27 +1,85 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useMeProfileQuery } from "@/entities/user";
 import { type UserLanguagePair, useMeLanguagePairsQuery } from "@/entities/user-language-pair";
 import { useAuthFailureRedirect } from "@/features/auth";
+import { useUpdateProfile } from "@/features/me";
+import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
-import { Button } from "@/shared/ui";
+import { Button, TextField } from "@/shared/ui";
 
 export function ProfileScreen() {
   const router = useRouter();
   const profileQuery = useMeProfileQuery();
   const languagePairsQuery = useMeLanguagePairsQuery();
-  const authError = profileQuery.error ?? languagePairsQuery.error;
+  const updateProfileMutation = useUpdateProfile();
+  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
+  const [displayNameInput, setDisplayNameInput] = useState("");
+  const [displayNameError, setDisplayNameError] = useState<string | undefined>();
+  const [notice, setNotice] = useState<string | null>(null);
+  const authError = profileQuery.error ?? languagePairsQuery.error ?? updateProfileMutation.error;
   const hasUnauthorizedError = useAuthFailureRedirect(authError);
 
   const profile = profileQuery.data;
+  const savedDisplayName = profile?.profile?.displayName ?? "";
   const displayName = profile?.profile?.displayName || "Your profile";
   const activeLanguagePair = profile?.activeLanguagePair;
   const activePairLabel = activeLanguagePair
     ? `${activeLanguagePair.sourceLanguage.name} -> ${activeLanguagePair.targetLanguage.name}`
     : "Not selected";
+
+  useEffect(() => {
+    if (!isEditingDisplayName) {
+      setDisplayNameInput(savedDisplayName);
+    }
+  }, [isEditingDisplayName, savedDisplayName]);
+
+  const handleStartEditDisplayName = () => {
+    setDisplayNameInput(savedDisplayName);
+    setDisplayNameError(undefined);
+    setNotice(null);
+    setIsEditingDisplayName(true);
+  };
+
+  const handleCancelEditDisplayName = () => {
+    setDisplayNameInput(savedDisplayName);
+    setDisplayNameError(undefined);
+    setIsEditingDisplayName(false);
+  };
+
+  const handleSaveDisplayName = async () => {
+    const nextDisplayName = displayNameInput.trim();
+
+    if (nextDisplayName.length < 2) {
+      setDisplayNameError("Display name must be at least 2 characters.");
+      return;
+    }
+
+    if (nextDisplayName.length > 50) {
+      setDisplayNameError("Display name must be 50 characters or fewer.");
+      return;
+    }
+
+    if (nextDisplayName === savedDisplayName) {
+      setIsEditingDisplayName(false);
+      return;
+    }
+
+    setDisplayNameError(undefined);
+    setNotice(null);
+
+    try {
+      await updateProfileMutation.mutateAsync({ displayName: nextDisplayName });
+      setIsEditingDisplayName(false);
+      setNotice("Profile updated.");
+    } catch (error) {
+      setNotice(isApiError(error) ? error.message : "Could not update profile.");
+    }
+  };
 
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
@@ -52,6 +110,59 @@ export function ProfileScreen() {
 
       {profile ? (
         <View style={styles.card}>
+          <View style={styles.displayNameHeader}>
+            <InfoRow label="Display name" value={profile.profile?.displayName || "Not set"} />
+            {!isEditingDisplayName ? (
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={8}
+                style={styles.editButton}
+                onPress={handleStartEditDisplayName}
+              >
+                <Text style={styles.editButtonText}>Edit</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {isEditingDisplayName ? (
+            <View style={styles.editForm}>
+              <TextField
+                autoCapitalize="words"
+                error={displayNameError}
+                label="New display name"
+                maxLength={50}
+                placeholder="Your name"
+                value={displayNameInput}
+                onChangeText={(value) => {
+                  setDisplayNameInput(value);
+                  setDisplayNameError(undefined);
+                }}
+              />
+              <View style={styles.editActions}>
+                <Button
+                  disabled={updateProfileMutation.isPending}
+                  title="Cancel"
+                  variant="secondary"
+                  style={styles.editAction}
+                  onPress={handleCancelEditDisplayName}
+                />
+                <Button
+                  disabled={updateProfileMutation.isPending}
+                  loading={updateProfileMutation.isPending}
+                  title="Save"
+                  style={styles.editAction}
+                  onPress={handleSaveDisplayName}
+                />
+              </View>
+            </View>
+          ) : null}
+
+          {notice ? (
+            <Text style={[styles.notice, updateProfileMutation.isError ? styles.noticeError : null]}>
+              {notice}
+            </Text>
+          ) : null}
+
           <InfoRow label="Email" value={profile.email} />
           <InfoRow label="Country" value={profile.profile?.countryCode || "Not set"} />
           <InfoRow label="Interface language" value={profile.profile?.interfaceLanguage || "Not set"} />
@@ -205,6 +316,41 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundSoft,
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  displayNameHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  editButton: {
+    minHeight: 32,
+    justifyContent: "center",
+  },
+  editButtonText: {
+    color: colors.orange,
+    fontSize: 14,
+    fontWeight: typography.weights.bold,
+  },
+  editForm: {
+    gap: spacing.md,
+  },
+  editActions: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  editAction: {
+    flex: 1,
+    minHeight: 50,
+  },
+  notice: {
+    color: colors.green,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: typography.weights.medium,
+  },
+  noticeError: {
+    color: colors.error,
   },
   infoRow: {
     gap: spacing.xs,

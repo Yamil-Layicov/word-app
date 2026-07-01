@@ -22,3 +22,8 @@ export type UserLanguagePair = {
   isActive: boolean;
   createdAt: string;
 };
+
+export type AddMeLanguagePairRequest = {
+  languagePairId: string;
+  targetCefrLevel?: CefrLevel;
+};

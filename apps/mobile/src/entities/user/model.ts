@@ -37,3 +37,7 @@ export type UpdateMeProfileRequest = {
   countryCode?: string;
   interfaceLanguage?: string;
 };
+
+export type SetActiveLanguagePairRequest = {
+  languagePairId: string;
+};

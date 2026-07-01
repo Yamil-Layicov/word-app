@@ -2,6 +2,7 @@ import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { saveRegisterDraft } from "@/features/auth";
 import { AuthScreenScaffold } from "@/shared/layout/AuthScreenScaffold";
 import { colors, spacing, typography } from "@/shared/theme";
 import { Button, Checkbox, PasswordField, TextField } from "@/shared/ui";
@@ -59,6 +60,11 @@ export function RegisterScreen() {
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length === 0) {
+      saveRegisterDraft({
+        displayName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+      });
       router.push("/language-pair");
     }
   };

@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
-import { useMeLanguagePairsQuery } from "@/entities/user-language-pair";
+import { type CefrLevel, useMeLanguagePairsQuery } from "@/entities/user-language-pair";
 import { useAuthFailureRedirect } from "@/features/auth";
 import { useAddLanguagePair } from "@/features/me";
 import { isApiError } from "@/shared/api/http-error";
@@ -13,12 +13,15 @@ import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
+const CEFR_LEVELS: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1", "C2"];
+
 export function AddLanguagePairScreen() {
   const router = useRouter();
   const languagePairsQuery = useLanguagePairsQuery();
   const meLanguagePairsQuery = useMeLanguagePairsQuery();
   const addLanguagePairMutation = useAddLanguagePair();
   const [selectedLanguagePairId, setSelectedLanguagePairId] = useState<string | null>(null);
+  const [selectedCefrLevel, setSelectedCefrLevel] = useState<CefrLevel>("B1");
   const [notice, setNotice] = useState<string | null>(null);
   const hasUnauthorizedError = useAuthFailureRedirect(
     meLanguagePairsQuery.error ?? addLanguagePairMutation.error,
@@ -55,6 +58,7 @@ export function AddLanguagePairScreen() {
     try {
       await addLanguagePairMutation.mutateAsync({
         languagePairId: selectedLanguagePair.id,
+        targetCefrLevel: selectedCefrLevel,
       });
       router.back();
     } catch (error) {
@@ -118,6 +122,35 @@ export function AddLanguagePairScreen() {
           }}
         />
       ))}
+
+      {availableLanguagePairs.length > 0 ? (
+        <View style={styles.levelSection}>
+          <Text style={styles.levelTitle}>Target level</Text>
+          <View style={styles.levelGrid}>
+            {CEFR_LEVELS.map((level) => (
+              <Pressable
+                key={level}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedCefrLevel === level }}
+                style={[
+                  styles.levelButton,
+                  selectedCefrLevel === level ? styles.levelButtonSelected : null,
+                ]}
+                onPress={() => setSelectedCefrLevel(level)}
+              >
+                <Text
+                  style={[
+                    styles.levelButtonText,
+                    selectedCefrLevel === level ? styles.levelButtonTextSelected : null,
+                  ]}
+                >
+                  {level}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       {notice ? (
         <Text style={[styles.notice, addLanguagePairMutation.isError ? styles.noticeError : null]}>
@@ -298,6 +331,49 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: typography.weights.bold,
     textAlign: "center",
+  },
+  levelSection: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundSoft,
+    padding: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  levelTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: typography.weights.bold,
+    marginBottom: spacing.md,
+  },
+  levelGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  levelButton: {
+    minWidth: 54,
+    minHeight: 38,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  levelButtonSelected: {
+    borderColor: colors.green,
+    backgroundColor: colors.green,
+  },
+  levelButtonText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: typography.weights.bold,
+  },
+  levelButtonTextSelected: {
+    color: colors.white,
   },
   notice: {
     color: colors.green,

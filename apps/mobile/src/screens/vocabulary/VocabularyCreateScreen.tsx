@@ -15,6 +15,8 @@ const WORD_TYPES: WordType[] = ["NOUN", "VERB", "ADJECTIVE", "ADVERB", "PHRASE",
 const CEFR_LEVELS: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1", "C2"];
 
 type FieldErrors = {
+  exampleSourceSentence?: string;
+  exampleTargetSentence?: string;
   sourceText?: string;
   targetText?: string;
 };
@@ -26,6 +28,8 @@ export function VocabularyCreateScreen() {
   const [targetText, setTargetText] = useState("");
   const [definition, setDefinition] = useState("");
   const [note, setNote] = useState("");
+  const [exampleSourceSentence, setExampleSourceSentence] = useState("");
+  const [exampleTargetSentence, setExampleTargetSentence] = useState("");
   const [wordType, setWordType] = useState<WordType>("NOUN");
   const [cefrLevel, setCefrLevel] = useState<CefrLevel>("A1");
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -38,6 +42,8 @@ export function VocabularyCreateScreen() {
     const nextTargetText = targetText.trim();
     const nextDefinition = definition.trim();
     const nextNote = note.trim();
+    const nextExampleSourceSentence = exampleSourceSentence.trim();
+    const nextExampleTargetSentence = exampleTargetSentence.trim();
 
     if (!nextSourceText) {
       nextErrors.sourceText = "Source text is required.";
@@ -49,6 +55,20 @@ export function VocabularyCreateScreen() {
       nextErrors.targetText = "Target text is required.";
     } else if (nextTargetText.length > 200) {
       nextErrors.targetText = "Target text must be 200 characters or fewer.";
+    }
+
+    if (nextExampleSourceSentence && !nextExampleTargetSentence) {
+      nextErrors.exampleTargetSentence = "Target example is required.";
+    } else if (nextExampleTargetSentence && !nextExampleSourceSentence) {
+      nextErrors.exampleSourceSentence = "Source example is required.";
+    }
+
+    if (nextExampleSourceSentence.length > 500) {
+      nextErrors.exampleSourceSentence = "Source example must be 500 characters or fewer.";
+    }
+
+    if (nextExampleTargetSentence.length > 500) {
+      nextErrors.exampleTargetSentence = "Target example must be 500 characters or fewer.";
     }
 
     setErrors(nextErrors);
@@ -66,6 +86,16 @@ export function VocabularyCreateScreen() {
         cefrLevel,
         ...(nextDefinition ? { definition: nextDefinition } : {}),
         ...(nextNote ? { note: nextNote } : {}),
+        ...(nextExampleSourceSentence && nextExampleTargetSentence
+          ? {
+              examples: [
+                {
+                  sourceSentence: nextExampleSourceSentence,
+                  targetSentence: nextExampleTargetSentence,
+                },
+              ],
+            }
+          : {}),
       });
 
       router.replace({
@@ -162,6 +192,34 @@ export function VocabularyCreateScreen() {
           value={note}
           onChangeText={setNote}
         />
+
+        <View style={styles.exampleSection}>
+          <Text style={styles.exampleSectionTitle}>Example sentence</Text>
+          <TextField
+            error={errors.exampleSourceSentence}
+            maxLength={500}
+            multiline
+            placeholder="I read a book."
+            style={styles.multilineInput}
+            value={exampleSourceSentence}
+            onChangeText={(value) => {
+              setExampleSourceSentence(value);
+              setErrors((current) => ({ ...current, exampleSourceSentence: undefined }));
+            }}
+          />
+          <TextField
+            error={errors.exampleTargetSentence}
+            maxLength={500}
+            multiline
+            placeholder="Men kitab oxudum."
+            style={styles.multilineInput}
+            value={exampleTargetSentence}
+            onChangeText={(value) => {
+              setExampleTargetSentence(value);
+              setErrors((current) => ({ ...current, exampleTargetSentence: undefined }));
+            }}
+          />
+        </View>
       </View>
 
       {notice ? (
@@ -290,6 +348,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   optionSectionTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: typography.weights.semibold,
+  },
+  exampleSection: {
+    gap: spacing.md,
+  },
+  exampleSectionTitle: {
     color: colors.text,
     fontSize: 13,
     fontWeight: typography.weights.semibold,

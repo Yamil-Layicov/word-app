@@ -1,18 +1,29 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { type VocabularyItem, useVocabularyItemsQuery } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
-import { Button } from "@/shared/ui";
+import { Button, TextField } from "@/shared/ui";
 
 export function VocabularyListScreen() {
   const router = useRouter();
-  const vocabularyQuery = useVocabularyItemsQuery({ limit: 20 });
+  const [searchText, setSearchText] = useState("");
+  const vocabularyFilters = useMemo(() => {
+    const search = searchText.trim();
+
+    return {
+      limit: 20,
+      ...(search ? { search } : {}),
+    };
+  }, [searchText]);
+  const vocabularyQuery = useVocabularyItemsQuery(vocabularyFilters);
   const hasUnauthorizedError = useAuthFailureRedirect(vocabularyQuery.error);
   const items = vocabularyQuery.data?.items ?? [];
+  const hasSearch = searchText.trim().length > 0;
 
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
@@ -39,6 +50,29 @@ export function VocabularyListScreen() {
         <Text style={styles.subtitle}>Review the words saved to your active language pair.</Text>
       </View>
 
+      <View style={styles.searchBox}>
+        <TextField
+          autoCapitalize="none"
+          autoCorrect={false}
+          icon="search-outline"
+          placeholder="Search words"
+          returnKeyType="search"
+          value={searchText}
+          rightElement={
+            hasSearch ? (
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => setSearchText("")}
+              >
+                <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+              </Pressable>
+            ) : null
+          }
+          onChangeText={setSearchText}
+        />
+      </View>
+
       {vocabularyQuery.isLoading ? <StateBox title="Loading vocabulary..." /> : null}
 
       {vocabularyQuery.isError && !hasUnauthorizedError ? (
@@ -50,7 +84,7 @@ export function VocabularyListScreen() {
       ) : null}
 
       {!vocabularyQuery.isLoading && !vocabularyQuery.isError && items.length === 0 ? (
-        <StateBox title="No words added yet." />
+        <StateBox title={hasSearch ? "No words found." : "No words added yet."} />
       ) : null}
 
       {items.map((item) => (
@@ -183,6 +217,9 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
     textAlign: "center",
     marginTop: spacing.xs,
+  },
+  searchBox: {
+    marginBottom: spacing.lg,
   },
   row: {
     minHeight: 92,

@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useVocabularyItemQuery } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
+import { useArchiveVocabularyItem, useUpdateVocabularyItem } from "@/features/vocabulary";
+import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
@@ -13,8 +16,70 @@ export function VocabularyDetailScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
   const vocabularyItemId = typeof params.id === "string" ? params.id : "";
   const vocabularyItemQuery = useVocabularyItemQuery(vocabularyItemId);
-  const hasUnauthorizedError = useAuthFailureRedirect(vocabularyItemQuery.error);
+  const updateVocabularyItemMutation = useUpdateVocabularyItem();
+  const archiveVocabularyItemMutation = useArchiveVocabularyItem();
+  const [notice, setNotice] = useState<string | null>(null);
+  const hasUnauthorizedError = useAuthFailureRedirect(
+    vocabularyItemQuery.error ??
+      updateVocabularyItemMutation.error ??
+      archiveVocabularyItemMutation.error,
+  );
   const item = vocabularyItemQuery.data;
+  const isMutating = updateVocabularyItemMutation.isPending || archiveVocabularyItemMutation.isPending;
+
+  const handleToggleFavorite = async () => {
+    if (!item) {
+      return;
+    }
+
+    const nextFavoriteState = !item.userWord.isFavorite;
+    setNotice(null);
+
+    try {
+      await updateVocabularyItemMutation.mutateAsync({
+        id: item.id,
+        data: { isFavorite: nextFavoriteState },
+      });
+      setNotice(nextFavoriteState ? "Added to favorites." : "Removed from favorites.");
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(isApiError(error) ? error.message : "Could not update favorite.");
+      }
+    }
+  };
+
+  const handleArchive = () => {
+    if (!item) {
+      return;
+    }
+
+    Alert.alert("Archive word", "This word will be removed from your active vocabulary list.", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Archive",
+        style: "destructive",
+        onPress: () => {
+          void archiveWord(item.id);
+        },
+      },
+    ]);
+  };
+
+  const archiveWord = async (id: string) => {
+    setNotice(null);
+
+    try {
+      await archiveVocabularyItemMutation.mutateAsync(id);
+      router.replace("/vocabulary");
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(isApiError(error) ? error.message : "Could not archive word.");
+      }
+    }
+  };
 
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
@@ -44,10 +109,45 @@ export function VocabularyDetailScreen() {
             <Text style={styles.sourceText}>{item.sourceText}</Text>
             <Text style={styles.targetText}>{item.targetText}</Text>
             <Text style={styles.metaText}>
-              {item.wordType.replace("_", " ").toLowerCase()} · {item.cefrLevel || "No level"} ·{" "}
+              {item.wordType.replace("_", " ").toLowerCase()} - {item.cefrLevel || "No level"} -{" "}
               {item.userWord.status.toLowerCase()}
             </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isMutating }}
+              disabled={isMutating}
+              style={[
+                styles.favoriteButton,
+                item.userWord.isFavorite ? styles.favoriteButtonActive : null,
+                isMutating ? styles.favoriteButtonDisabled : null,
+              ]}
+              onPress={handleToggleFavorite}
+            >
+              <Ionicons
+                name={item.userWord.isFavorite ? "star" : "star-outline"}
+                size={18}
+                color={item.userWord.isFavorite ? colors.white : colors.orange}
+              />
+              <Text
+                style={[
+                  styles.favoriteButtonText,
+                  item.userWord.isFavorite ? styles.favoriteButtonTextActive : null,
+                ]}
+              >
+                {updateVocabularyItemMutation.isPending
+                  ? "Saving..."
+                  : item.userWord.isFavorite
+                    ? "Favorite"
+                    : "Add favorite"}
+              </Text>
+            </Pressable>
           </View>
+
+          {notice ? (
+            <Text style={[styles.notice, updateVocabularyItemMutation.isError ? styles.noticeError : null]}>
+              {notice}
+            </Text>
+          ) : null}
 
           <View style={styles.card}>
             <InfoRow label="Definition" value={item.definition || "Not set"} />
@@ -57,6 +157,19 @@ export function VocabularyDetailScreen() {
             <InfoRow label="Correct / Wrong" value={`${item.userWord.correctCount} / ${item.userWord.wrongCount}`} />
             <InfoRow label="Next review" value={formatOptionalDate(item.userWord.nextReviewAt)} />
           </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isMutating }}
+            disabled={isMutating}
+            style={[styles.archiveButton, isMutating ? styles.archiveButtonDisabled : null]}
+            onPress={handleArchive}
+          >
+            <Ionicons name="archive-outline" size={18} color={colors.error} />
+            <Text style={styles.archiveButtonText}>
+              {archiveVocabularyItemMutation.isPending ? "Archiving..." : "Archive word"}
+            </Text>
+          </Pressable>
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Examples</Text>
@@ -179,6 +292,44 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
     marginTop: spacing.sm,
   },
+  favoriteButton: {
+    minHeight: 40,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.orange,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  favoriteButtonActive: {
+    borderColor: colors.orange,
+    backgroundColor: colors.orange,
+  },
+  favoriteButtonDisabled: {
+    opacity: 0.56,
+  },
+  favoriteButtonText: {
+    color: colors.orange,
+    fontSize: 14,
+    fontWeight: typography.weights.bold,
+  },
+  favoriteButtonTextActive: {
+    color: colors.white,
+  },
+  notice: {
+    color: colors.green,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: typography.weights.medium,
+    textAlign: "center",
+    marginBottom: spacing.md,
+  },
+  noticeError: {
+    color: colors.error,
+  },
   card: {
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -186,6 +337,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundSoft,
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  archiveButton: {
+    minHeight: 48,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.error,
+    backgroundColor: colors.white,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  archiveButtonDisabled: {
+    opacity: 0.56,
+  },
+  archiveButtonText: {
+    color: colors.error,
+    fontSize: 15,
+    fontWeight: typography.weights.bold,
   },
   infoRow: {
     gap: spacing.xs,

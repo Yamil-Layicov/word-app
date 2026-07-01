@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -19,13 +19,13 @@ function isEmail(value: string) {
 }
 
 export function RegisterScreen() {
+  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [errors, setErrors] = useState<RegisterErrors>({});
-  const [notice, setNotice] = useState<string | null>(null);
 
   const handleSubmit = () => {
     const nextErrors: RegisterErrors = {};
@@ -57,10 +57,9 @@ export function RegisterScreen() {
     }
 
     setErrors(nextErrors);
-    setNotice(null);
 
     if (Object.keys(nextErrors).length === 0) {
-      setNotice("Next step: choose your language pair.");
+      router.push("/language-pair");
     }
   };
 
@@ -145,8 +144,6 @@ export function RegisterScreen() {
       </Pressable>
       {errors.terms ? <Text style={styles.termsError}>{errors.terms}</Text> : null}
 
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-
       <Button title="Create account" onPress={handleSubmit} />
 
       <Text style={styles.footerText}>
@@ -185,13 +182,6 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 12,
     fontWeight: typography.weights.medium,
-  },
-  notice: {
-    color: colors.green,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: typography.weights.medium,
-    textAlign: "center",
   },
   footerText: {
     color: colors.textMuted,

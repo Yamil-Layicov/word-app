@@ -1,10 +1,21 @@
+import { useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
+import { useLogout } from "@/features/auth";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { appBrand } from "@/shared/config/brand";
 import { colors, spacing, typography } from "@/shared/theme";
+import { Button } from "@/shared/ui";
 
 export default function AppHomeRoute() {
+  const logout = useLogout();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    logout();
+    router.replace("/login");
+  };
+
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm}>
       <View style={styles.content}>
@@ -13,6 +24,7 @@ export default function AppHomeRoute() {
         </View>
         <Text style={styles.title}>{appBrand.name}</Text>
         <Text style={styles.subtitle}>App shell placeholder</Text>
+        <Button title="Log out" variant="secondary" style={styles.logoutButton} onPress={handleLogout} />
       </View>
     </ScreenContainer>
   );
@@ -49,5 +61,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 15,
     fontWeight: typography.weights.medium,
+  },
+  logoutButton: {
+    marginTop: spacing.xl,
+    minWidth: 160,
   },
 });

@@ -1,5 +1,6 @@
 export { login, register } from "./api";
 export { useLogin } from "./hooks/useLogin";
+export { useLogout } from "./hooks/useLogout";
 export { useRegister } from "./hooks/useRegister";
 export {
   clearRegisterDraft,

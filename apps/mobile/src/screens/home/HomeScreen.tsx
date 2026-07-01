@@ -61,7 +61,8 @@ export function HomeScreen() {
           </View>
         ) : null}
 
-        <Button title="View profile" style={styles.profileButton} onPress={() => router.push("/profile")} />
+        <Button title="View vocabulary" style={styles.primaryActionButton} onPress={() => router.push("/vocabulary")} />
+        <Button title="View profile" variant="secondary" style={styles.secondaryActionButton} onPress={() => router.push("/profile")} />
         <Button title="Log out" variant="secondary" style={styles.logoutButton} onPress={handleLogout} />
       </View>
     </ScreenContainer>
@@ -144,9 +145,13 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
     textAlign: "center",
   },
-  profileButton: {
+  primaryActionButton: {
     marginTop: spacing.xl,
-    minWidth: 180,
+    minWidth: 190,
+  },
+  secondaryActionButton: {
+    marginTop: spacing.md,
+    minWidth: 190,
   },
   logoutButton: {
     marginTop: spacing.md,

@@ -1,27 +1,20 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { useMeProfileQuery } from "@/entities/user";
-import { useMeLanguagePairsQuery } from "@/entities/user-language-pair";
 import { useAuthFailureRedirect } from "@/features/auth";
-import { appBrand } from "@/shared/config/brand";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
 import { HomeBottomNav } from "./HomeBottomNav";
-import { HomeHeader } from "./HomeHeader";
+import { HomeDecksSection } from "./HomeDecksSection";
 import { HomeTopBar } from "./HomeTopBar";
-import { LanguagePairSummaryCard } from "./LanguagePairSummaryCard";
-import { ReviewScheduleCard } from "./ReviewScheduleCard";
 import { getHomeSummary } from "./home-summary";
 
 export function HomeScreen() {
   const profileQuery = useMeProfileQuery();
-  const languagePairsQuery = useMeLanguagePairsQuery();
 
   const homeSummary = getHomeSummary({
-    isProfileLoading: profileQuery.isLoading,
-    languagePairCount: languagePairsQuery.data?.length ?? 0,
     profile: profileQuery.data,
   });
   const hasUnauthorizedError = useAuthFailureRedirect(profileQuery.error);
@@ -34,14 +27,6 @@ export function HomeScreen() {
     >
       <HomeTopBar activePairCodeLabel={homeSummary.activePairCodeLabel} />
 
-      <HomeHeader title={appBrand.name} subtitle={homeSummary.headerSubtitle} />
-
-      <LanguagePairSummaryCard
-        activePairLabel={homeSummary.activePairLabel}
-        isLoading={languagePairsQuery.isLoading}
-        languagePairCount={homeSummary.languagePairCount}
-      />
-
       {profileQuery.isError && !hasUnauthorizedError ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>Could not load your profile.</Text>
@@ -49,7 +34,7 @@ export function HomeScreen() {
         </View>
       ) : null}
 
-      <ReviewScheduleCard />
+      <HomeDecksSection />
     </ScreenContainer>
   );
 }

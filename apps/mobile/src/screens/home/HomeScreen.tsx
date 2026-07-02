@@ -10,6 +10,7 @@ import { Button } from "@/shared/ui";
 
 import { HomeActions } from "./HomeActions";
 import { HomeHeader } from "./HomeHeader";
+import { HomeTopBar } from "./HomeTopBar";
 import { LanguagePairSummaryCard } from "./LanguagePairSummaryCard";
 import { ReviewScheduleCard } from "./ReviewScheduleCard";
 import { getHomeSummary } from "./home-summary";
@@ -27,6 +28,8 @@ export function HomeScreen() {
 
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
+      <HomeTopBar activePairCodeLabel={homeSummary.activePairCodeLabel} />
+
       <HomeHeader title={appBrand.name} subtitle={homeSummary.headerSubtitle} />
 
       <LanguagePairSummaryCard

@@ -12,6 +12,7 @@ export function getHomeSummary({
   profile,
 }: HomeSummaryInput) {
   return {
+    activePairCodeLabel: getActivePairCodeLabel(profile?.activeLanguagePair),
     activePairLabel: getActivePairLabel(profile?.activeLanguagePair),
     headerSubtitle: getHeaderSubtitle(profile, isProfileLoading),
     languagePairCount,
@@ -38,4 +39,12 @@ function getActivePairLabel(activeLanguagePair: MeProfile["activeLanguagePair"] 
   }
 
   return `${activeLanguagePair.sourceLanguage.name} -> ${activeLanguagePair.targetLanguage.name}`;
+}
+
+function getActivePairCodeLabel(activeLanguagePair: MeProfile["activeLanguagePair"] | undefined) {
+  if (!activeLanguagePair) {
+    return "Pair";
+  }
+
+  return `${activeLanguagePair.sourceLanguage.code.toUpperCase()} -> ${activeLanguagePair.targetLanguage.code.toUpperCase()}`;
 }

@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import type { PropsWithChildren, ReactNode } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +13,7 @@ type ScreenContainerProps = PropsWithChildren<{
   scroll?: boolean;
   backgroundColor?: string;
   contentStyle?: StyleProp<ViewStyle>;
+  footer?: ReactNode;
 }>;
 
 export function ScreenContainer({
@@ -20,6 +21,7 @@ export function ScreenContainer({
   scroll = true,
   backgroundColor = "#FFFFFF",
   contentStyle,
+  footer,
 }: ScreenContainerProps) {
   if (scroll) {
     return (
@@ -35,6 +37,7 @@ export function ScreenContainer({
           >
             {children}
           </ScrollView>
+          {footer}
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
@@ -43,6 +46,7 @@ export function ScreenContainer({
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor }]}>
       {children}
+      {footer}
     </SafeAreaView>
   );
 }

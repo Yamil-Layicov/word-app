@@ -1,5 +1,5 @@
 export const colors = {
-  backgroundWarm: "#FFF8EF",
+  backgroundWarm: "#FFF9F2",
   backgroundSoft: "#FFFDF9",
   white: "#FFFFFF",
   navy: "#081D33",
@@ -10,6 +10,7 @@ export const colors = {
   borderStrong: "#DDC8AE",
   inputBackground: "#FFFDF9",
   orange: "#FF6416",
+  orangeSoft: "#FFF1E8",
   orangePressed: "#EA520B",
   green: "#5A8B3E",
   error: "#C2410C",

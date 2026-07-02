@@ -8,7 +8,7 @@ import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
-import { HomeActions } from "./HomeActions";
+import { HomeBottomNav } from "./HomeBottomNav";
 import { HomeHeader } from "./HomeHeader";
 import { HomeTopBar } from "./HomeTopBar";
 import { LanguagePairSummaryCard } from "./LanguagePairSummaryCard";
@@ -27,7 +27,11 @@ export function HomeScreen() {
   const hasUnauthorizedError = useAuthFailureRedirect(profileQuery.error);
 
   return (
-    <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
+    <ScreenContainer
+      backgroundColor={colors.backgroundWarm}
+      contentStyle={styles.content}
+      footer={<HomeBottomNav />}
+    >
       <HomeTopBar activePairCodeLabel={homeSummary.activePairCodeLabel} />
 
       <HomeHeader title={appBrand.name} subtitle={homeSummary.headerSubtitle} />
@@ -46,8 +50,6 @@ export function HomeScreen() {
       ) : null}
 
       <ReviewScheduleCard />
-
-      <HomeActions />
     </ScreenContainer>
   );
 }
@@ -58,7 +60,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
-    paddingBottom: spacing.xxxl,
+    paddingBottom: spacing.xl,
   },
   errorBox: {
     gap: spacing.md,

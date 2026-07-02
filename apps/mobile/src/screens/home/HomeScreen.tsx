@@ -61,7 +61,8 @@ export function HomeScreen() {
           </View>
         ) : null}
 
-        <Button title="Practice flashcards" style={styles.primaryActionButton} onPress={() => router.push("/practice")} />
+        <Button title="Review due words" style={styles.primaryActionButton} onPress={() => router.push("./review")} />
+        <Button title="Practice flashcards" variant="secondary" style={styles.secondaryActionButton} onPress={() => router.push("/practice")} />
         <Button title="View vocabulary" variant="secondary" style={styles.secondaryActionButton} onPress={() => router.push("/vocabulary")} />
         <Button title="View profile" variant="secondary" style={styles.secondaryActionButton} onPress={() => router.push("/profile")} />
         <Button title="Log out" variant="secondary" style={styles.logoutButton} onPress={handleLogout} />

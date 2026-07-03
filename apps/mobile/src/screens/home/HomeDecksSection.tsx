@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import {
-  type UserWordStatus,
   type VocabularyItem,
   useVocabularyItemsQuery,
 } from "@/entities/vocabulary-item";
@@ -12,7 +11,7 @@ import { useAuthFailureRedirect } from "@/features/auth";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
-const HOME_DECK_PREVIEW_LIMIT = 5;
+const HOME_DECK_PREVIEW_LIMIT = 20;
 
 export function HomeDecksSection() {
   const router = useRouter();
@@ -103,18 +102,11 @@ export function HomeDecksSection() {
 
       {items.length > 0 ? (
         <View style={styles.cardList}>
-          {items.map((item) => (
-            <HomeDeckCard
-              key={item.id}
-              item={item}
-              onPress={() =>
-                router.push({
-                  pathname: "/vocabulary/[id]",
-                  params: { id: item.id },
-                })
-              }
-            />
-          ))}
+          <HomeDeckCard
+            items={items}
+            title={hasActiveCriteria ? "Filtered words" : "My Vocabulary"}
+            onPress={() => router.push("/vocabulary")}
+          />
         </View>
       ) : null}
     </View>
@@ -122,12 +114,13 @@ export function HomeDecksSection() {
 }
 
 type HomeDeckCardProps = {
-  item: VocabularyItem;
+  items: VocabularyItem[];
   onPress: () => void;
+  title: string;
 };
 
-function HomeDeckCard({ item, onPress }: HomeDeckCardProps) {
-  const progress = getProgressPercent(item.userWord.status, item.userWord.correctCount, item.userWord.reviewCount);
+function HomeDeckCard({ items, onPress, title }: HomeDeckCardProps) {
+  const progress = getDeckProgressPercent(items);
 
   return (
     <View style={styles.card}>
@@ -137,8 +130,11 @@ function HomeDeckCard({ item, onPress }: HomeDeckCardProps) {
         onPress={onPress}
       >
         <Text numberOfLines={1} style={styles.cardTitle}>
-          {item.sourceText}
+          {title}
         </Text>
+        <Text numberOfLines={1} style={styles.cardMeta}>
+          {items.length} words
+        </Text> 
         <View style={styles.progressRow}>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progress}%` }]} />
@@ -176,24 +172,27 @@ function StateCard({ actionTitle, onAction, title }: StateCardProps) {
   );
 }
 
-function getProgressPercent(status: UserWordStatus, correctCount: number, reviewCount: number) {
-  if (reviewCount > 0) {
-    return Math.min(100, Math.round((correctCount / reviewCount) * 100));
+function getDeckProgressPercent(items: VocabularyItem[]) {
+  if (items.length === 0) {
+    return 0;
   }
 
-  switch (status) {
-    case "MASTERED":
-      return 100;
-    case "REVIEWING":
-      return 60;
-    case "LEARNING":
-      return 35;
-    case "ARCHIVED":
-      return 0;
-    case "NEW":
-    default:
-      return 10;
+  const maxScore = items.length * 5;
+  const currentScore = items.reduce((total, item) => total + getEstimatedMasteryStep(item), 0);
+
+  return Math.round((currentScore / maxScore) * 100);
+}
+
+function getEstimatedMasteryStep(item: VocabularyItem) {
+  if (item.userWord.status === "MASTERED") {
+    return 5;
   }
+
+  if (item.userWord.status === "NEW") {
+    return 0;
+  }
+
+  return Math.min(4, Math.max(1, item.userWord.correctCount || item.userWord.reviewCount || 1));
 }
 
 const styles = StyleSheet.create({
@@ -272,6 +271,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     fontWeight: typography.weights.black,
+  },
+  cardMeta: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: typography.weights.semibold,
+    marginTop: spacing.xs,
   },
   progressRow: {
     flexDirection: "row",

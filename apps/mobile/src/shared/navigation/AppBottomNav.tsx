@@ -27,8 +27,8 @@ const APP_BOTTOM_NAV_ITEMS = [
   },
   {
     label: "Decks",
-    href: "/vocabulary",
-    pathPrefix: "/vocabulary",
+    href: "/decks",
+    pathPrefix: "/decks",
     icon: "albums-outline",
     activeIcon: "albums",
     color: "#D79B00",

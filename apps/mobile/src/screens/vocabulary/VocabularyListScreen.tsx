@@ -1,129 +1,111 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-
+import { useState } from "react";
 import {
-  type UserWordStatus,
-  type VocabularyItem,
-  useInfiniteVocabularyItemsQuery,
-} from "@/entities/vocabulary-item";
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
+import { type VocabularyItem, useInfiniteVocabularyItemsQuery } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
+import {
+  REVIEW_INTERVALS,
+  removeScheduledVocabularyItem,
+  scheduleVocabularyItem,
+  useReviewBoxesState,
+  type ReviewIntervalLabel,
+} from "@/features/review-boxes";
+import { useUpdateVocabularyItem } from "@/features/vocabulary";
+import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
-import { Button, TextField } from "@/shared/ui";
+import { Button } from "@/shared/ui";
 
-type VisibleUserWordStatus = Exclude<UserWordStatus, "ARCHIVED">;
-type VocabularyListFilter = "ALL" | "FAVORITES" | VisibleUserWordStatus;
-
-const FILTER_OPTIONS: { label: string; value: VocabularyListFilter }[] = [
-  { label: "All", value: "ALL" },
-  { label: "Favorites", value: "FAVORITES" },
-  { label: "New", value: "NEW" },
-  { label: "Learning", value: "LEARNING" },
-  { label: "Reviewing", value: "REVIEWING" },
-  { label: "Mastered", value: "MASTERED" },
-];
+import { VocabularyWordRow } from "./VocabularyWordRow";
 
 export function VocabularyListScreen() {
   const router = useRouter();
-  const [searchText, setSearchText] = useState("");
-  const [activeFilter, setActiveFilter] = useState<VocabularyListFilter>("ALL");
-  const vocabularyFilters = useMemo(() => {
-    const search = searchText.trim();
-
-    return {
-      limit: 20,
-      ...(search ? { search } : {}),
-      ...(activeFilter === "FAVORITES" ? { isFavorite: true } : {}),
-      ...(isStatusFilter(activeFilter) ? { status: activeFilter } : {}),
-    };
-  }, [activeFilter, searchText]);
-  const vocabularyQuery = useInfiniteVocabularyItemsQuery(vocabularyFilters);
-  const hasUnauthorizedError = useAuthFailureRedirect(vocabularyQuery.error);
+  const [selectedItem, setSelectedItem] = useState<VocabularyItem | null>(null);
+  const { scheduledWords } = useReviewBoxesState();
+  const [notice, setNotice] = useState<string | null>(null);
+  const updateVocabularyItemMutation = useUpdateVocabularyItem();
+  const vocabularyQuery = useInfiniteVocabularyItemsQuery({ limit: 20 });
+  const hasUnauthorizedError = useAuthFailureRedirect(
+    vocabularyQuery.error ?? updateVocabularyItemMutation.error,
+  );
   const items = vocabularyQuery.data?.pages.flatMap((page) => page.items) ?? [];
-  const hasSearch = searchText.trim().length > 0;
-  const hasActiveFilter = activeFilter !== "ALL";
+
+  const handleScheduleWord = (item: VocabularyItem, intervalLabel: ReviewIntervalLabel) => {
+    scheduleVocabularyItem(item.id, intervalLabel);
+    setSelectedItem(null);
+    setNotice(`${item.sourceText} added to ${intervalLabel}.`);
+  };
+
+  const handleMarkKnown = async (item: VocabularyItem) => {
+    setSelectedItem(null);
+    setNotice(null);
+
+    try {
+      await updateVocabularyItemMutation.mutateAsync({
+        id: item.id,
+        data: { status: "MASTERED" },
+      });
+      removeScheduledVocabularyItem(item.id);
+      setNotice(`${item.sourceText} marked as mastered.`);
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(isApiError(error) ? error.message : "Could not update this word.");
+      }
+    }
+  };
 
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
       <View style={styles.topBar}>
-        <Pressable accessibilityRole="button" style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={20} color={colors.orange} />
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
         <Pressable
+          accessibilityLabel="Go back"
           accessibilityRole="button"
-          style={styles.createLink}
-          onPress={() => router.push("/vocabulary/create")}
+          style={styles.iconButton}
+          onPress={() => router.back()}
         >
-          <Ionicons name="add" size={18} color={colors.orange} />
-          <Text style={styles.createLinkText}>Add</Text>
+          <Ionicons name="arrow-back-outline" size={24} color={colors.textMuted} />
         </Pressable>
+        <Text numberOfLines={1} style={styles.title}>My Vocabulary</Text>
+        <View style={styles.topSpacer} />
       </View>
 
-      <View style={styles.header}>
-        <View style={styles.iconShell}>
-          <Ionicons name="library-outline" size={30} color={colors.white} />
+      {notice ? (
+        <View style={styles.noticeBox}>
+          <Text style={styles.noticeText}>{notice}</Text>
         </View>
-        <Text style={styles.title}>Vocabulary</Text>
-        <Text style={styles.subtitle}>Review the words saved to your active language pair.</Text>
-      </View>
+      ) : null}
 
-      <View style={styles.searchBox}>
-        <TextField
-          autoCapitalize="none"
-          autoCorrect={false}
-          icon="search-outline"
-          placeholder="Search words"
-          returnKeyType="search"
-          value={searchText}
-          rightElement={
-            hasSearch ? (
-              <Pressable
-                accessibilityRole="button"
-                hitSlop={8}
-                onPress={() => setSearchText("")}
-              >
-                <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-              </Pressable>
-            ) : null
-          }
-          onChangeText={setSearchText}
-        />
-      </View>
-
-      <View style={styles.filterGrid}>
-        {FILTER_OPTIONS.map((option) => (
-          <FilterChip
-            key={option.value}
-            label={option.label}
-            selected={activeFilter === option.value}
-            onPress={() => setActiveFilter(option.value)}
-          />
-        ))}
-      </View>
-
-      {vocabularyQuery.isLoading ? <StateBox title="Loading vocabulary..." /> : null}
+      {vocabularyQuery.isLoading ? <StateBox title="Loading words..." /> : null}
 
       {vocabularyQuery.isError && !hasUnauthorizedError ? (
         <StateBox
-          title="Could not load vocabulary."
+          title="Could not load words."
           actionTitle="Try again"
           onAction={() => void vocabularyQuery.refetch()}
         />
       ) : null}
 
-      {!vocabularyQuery.isLoading && !vocabularyQuery.isError && items.length === 0 ? (
-        <StateBox
-          title={hasSearch || hasActiveFilter ? "No words match these filters." : "No words added yet."}
-        />
+      {!vocabularyQuery.isLoading &&
+      !vocabularyQuery.isError &&
+      items.length === 0 ? (
+        <StateBox title="No words added yet." />
       ) : null}
 
       {items.map((item) => (
-        <VocabularyRow
+        <VocabularyWordRow
           key={item.id}
           item={item}
+          scheduledWord={scheduledWords[item.id]}
+          showScheduledOverlay
+          onMenuPress={() => setSelectedItem(item)}
           onPress={() =>
             router.push({
               pathname: "/vocabulary/[id]",
@@ -145,56 +127,95 @@ export function VocabularyListScreen() {
           }}
         />
       ) : null}
+
+      <WordActionSheet
+        item={selectedItem}
+        isUpdating={updateVocabularyItemMutation.isPending}
+        onClose={() => setSelectedItem(null)}
+        onMarkKnown={(item) => {
+          void handleMarkKnown(item);
+        }}
+        onSchedule={handleScheduleWord}
+      />
     </ScreenContainer>
   );
 }
 
-type FilterChipProps = {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
+type WordActionSheetProps = {
+  item: VocabularyItem | null;
+  isUpdating: boolean;
+  onClose: () => void;
+  onMarkKnown: (item: VocabularyItem) => void;
+  onSchedule: (item: VocabularyItem, intervalLabel: ReviewIntervalLabel) => void;
 };
 
-function FilterChip({ label, selected, onPress }: FilterChipProps) {
+function WordActionSheet({
+  item,
+  isUpdating,
+  onClose,
+  onMarkKnown,
+  onSchedule,
+}: WordActionSheetProps) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={[styles.filterChip, selected ? styles.filterChipSelected : null]}
-      onPress={onPress}
-    >
-      <Text style={[styles.filterChipText, selected ? styles.filterChipTextSelected : null]}>
-        {label}
-      </Text>
-    </Pressable>
+    <Modal animationType="fade" transparent visible={Boolean(item)} onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.actionSheet}>
+          <View style={styles.sheetHandle} />
+          <Text numberOfLines={1} style={styles.sheetTitle}>
+            {item?.sourceText ?? "Word actions"}
+          </Text>
+          <Text numberOfLines={1} style={styles.sheetSubtitle}>
+            {item?.targetText ?? ""}
+          </Text>
+
+          {item ? (
+            <View style={styles.actionList}>
+              {REVIEW_INTERVALS.map((interval) => (
+                <ActionButton
+                  key={interval.label}
+                  icon={interval.label.includes("hour") ? "time-outline" : "calendar-outline"}
+                  label={`Review in ${interval.label}`}
+                  onPress={() => onSchedule(item, interval.label)}
+                />
+              ))}
+              <ActionButton
+                disabled={isUpdating || item.userWord.status === "MASTERED"}
+                icon="checkmark-circle-outline"
+                label={item.userWord.status === "MASTERED" ? "Already mastered" : "I know this word"}
+                onPress={() => onMarkKnown(item)}
+              />
+            </View>
+          ) : null}
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
-type VocabularyRowProps = {
-  item: VocabularyItem;
+type ActionButtonProps = {
+  disabled?: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
   onPress: () => void;
 };
 
-function VocabularyRow({ item, onPress }: VocabularyRowProps) {
+function ActionButton({ disabled = false, icon, label, onPress }: ActionButtonProps) {
   return (
-    <Pressable accessibilityRole="button" style={styles.row} onPress={onPress}>
-      <View style={styles.rowIcon}>
-        <Ionicons name="book-outline" size={21} color={colors.navy} />
-      </View>
-      <View style={styles.rowText}>
-        <View style={styles.wordLine}>
-          <Text style={styles.sourceText}>{item.sourceText}</Text>
-          {item.userWord.isFavorite ? (
-            <Ionicons name="star" size={16} color={colors.orange} />
-          ) : null}
-        </View>
-        <Text style={styles.targetText}>{item.targetText}</Text>
-        <Text style={styles.metaText}>
-          {item.wordType.replace("_", " ").toLowerCase()} - {item.cefrLevel || "No level"} -{" "}
-          {item.userWord.status.toLowerCase()}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.actionButton,
+        disabled ? styles.actionButtonDisabled : null,
+        pressed ? styles.pressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <Ionicons name={icon} size={20} color={disabled ? colors.textMuted : colors.navy} />
+      <Text style={[styles.actionButtonText, disabled ? styles.actionButtonTextDisabled : null]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -216,169 +237,156 @@ function StateBox({ title, actionTitle, onAction }: StateBoxProps) {
   );
 }
 
-function isStatusFilter(value: VocabularyListFilter): value is VisibleUserWordStatus {
-  return value !== "ALL" && value !== "FAVORITES";
-}
-
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     width: "100%",
     maxWidth: 440,
     alignSelf: "center",
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: 0,
     paddingTop: spacing.xl,
     paddingBottom: spacing.xxxl,
   },
   topBar: {
-    minHeight: 40,
+    minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
-  },
-  backButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: spacing.xs,
-    minHeight: 36,
-  },
-  backText: {
-    color: colors.orange,
-    fontSize: 15,
-    fontWeight: typography.weights.bold,
-  },
-  createLink: {
-    minHeight: 36,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  createLinkText: {
-    color: colors.orange,
-    fontSize: 15,
-    fontWeight: typography.weights.bold,
-  },
-  header: {
-    alignItems: "center",
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  iconShell: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.navy,
+    paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
   },
   title: {
     color: colors.navy,
-    fontSize: 34,
-    lineHeight: 40,
-    fontWeight: typography.weights.black,
-    textAlign: "center",
+    flex: 1,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: typography.weights.semibold,
   },
-  subtitle: {
-    color: colors.textMuted,
-    fontSize: 16,
-    lineHeight: 23,
-    fontWeight: typography.weights.medium,
-    textAlign: "center",
-    marginTop: spacing.xs,
+  topSpacer: {
+    width: 42,
+    height: 42,
   },
-  searchBox: {
-    marginBottom: spacing.md,
-  },
-  filterGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  filterChip: {
-    minHeight: 36,
+  iconButton: {
+    width: 42,
+    height: 42,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
+  },
+  noticeBox: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: "#DCECC3",
+    backgroundColor: "#F4FAE9",
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
-  filterChipSelected: {
-    borderColor: colors.green,
-    backgroundColor: colors.green,
-  },
-  filterChipText: {
-    color: colors.text,
+  noticeText: {
+    color: colors.green,
     fontSize: 13,
+    lineHeight: 18,
     fontWeight: typography.weights.bold,
   },
-  filterChipTextSelected: {
-    color: colors.white,
-  },
-  row: {
-    minHeight: 92,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.backgroundSoft,
+  scheduleCard: {
+    minHeight: 96,
+    borderTopWidth: 1,
+    borderTopColor: "#F0E8DE",
+    backgroundColor: colors.white,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  loadMoreButton: {
-    marginTop: spacing.sm,
-  },
-  rowIcon: {
+  scheduleCardIcon: {
     width: 44,
     height: 44,
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.white,
+    backgroundColor: "#EEF7D8",
   },
-  rowText: {
+  scheduleCardBody: {
     flex: 1,
     minWidth: 0,
   },
-  wordLine: {
+  scheduleCardTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
   },
-  sourceText: {
-    flexShrink: 1,
+  scheduleCardTitle: {
     color: colors.text,
-    fontSize: 17,
-    lineHeight: 23,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: typography.weights.bold,
+  },
+  scheduleStatusBadge: {
+    minHeight: 22,
+    borderRadius: radii.pill,
+    backgroundColor: "#EEF7D8",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+  },
+  scheduleStatusBadgeDue: {
+    backgroundColor: colors.orangeSoft,
+  },
+  scheduleStatusText: {
+    color: colors.green,
+    fontSize: 11,
     fontWeight: typography.weights.black,
   },
-  targetText: {
+  scheduleStatusTextDue: {
+    color: colors.orange,
+  },
+  scheduleCardMeta: {
     color: colors.textMuted,
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: typography.weights.semibold,
     marginTop: spacing.xs,
   },
-  metaText: {
-    color: colors.green,
+  scheduleCardDetail: {
+    color: colors.textMuted,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
     fontWeight: typography.weights.medium,
-    marginTop: spacing.xs,
-    textTransform: "capitalize",
+    marginTop: 2,
+  },
+  scheduleStartButton: {
+    minWidth: 70,
+    minHeight: 38,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.orange,
+    paddingHorizontal: spacing.md,
+  },
+  scheduleStartButtonDisabled: {
+    backgroundColor: colors.backgroundSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  scheduleStartButtonText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: typography.weights.black,
+  },
+  scheduleStartButtonTextDisabled: {
+    color: colors.textMuted,
+  },
+  loadMoreButton: {
+    marginTop: spacing.sm,
   },
   stateBox: {
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.backgroundSoft,
+    backgroundColor: colors.white,
     padding: spacing.lg,
     gap: spacing.md,
   },
@@ -388,5 +396,71 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: typography.weights.bold,
     textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(8, 18, 28, 0.42)",
+  },
+  actionSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxxl,
+  },
+  sheetHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: radii.pill,
+    backgroundColor: colors.border,
+    alignSelf: "center",
+    marginBottom: spacing.lg,
+  },
+  sheetTitle: {
+    color: colors.navy,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: typography.weights.black,
+    textAlign: "center",
+  },
+  sheetSubtitle: {
+    color: colors.textMuted,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: typography.weights.semibold,
+    textAlign: "center",
+    marginTop: spacing.xs,
+  },
+  actionList: {
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  actionButton: {
+    minHeight: 54,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundSoft,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  actionButtonDisabled: {
+    opacity: 0.56,
+  },
+  actionButtonText: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: typography.weights.bold,
+  },
+  actionButtonTextDisabled: {
+    color: colors.textMuted,
+  },
+  pressed: {
+    opacity: 0.72,
   },
 });

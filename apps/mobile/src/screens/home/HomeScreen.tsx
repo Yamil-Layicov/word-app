@@ -6,7 +6,6 @@ import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
-import { HomeBottomNav } from "./HomeBottomNav";
 import { HomeDecksSection } from "./HomeDecksSection";
 import { HomeTopBar } from "./HomeTopBar";
 import { getHomeSummary } from "./home-summary";
@@ -23,18 +22,19 @@ export function HomeScreen() {
     <ScreenContainer
       backgroundColor={colors.backgroundWarm}
       contentStyle={styles.content}
-      footer={<HomeBottomNav />}
     >
       <HomeTopBar activePairCodeLabel={homeSummary.activePairCodeLabel} />
 
-      {profileQuery.isError && !hasUnauthorizedError ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>Could not load your profile.</Text>
-          <Button title="Try again" variant="secondary" onPress={() => void profileQuery.refetch()} />
-        </View>
-      ) : null}
+      <View style={styles.body}>
+        {profileQuery.isError && !hasUnauthorizedError ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>Could not load your profile.</Text>
+            <Button title="Try again" variant="secondary" onPress={() => void profileQuery.refetch()} />
+          </View>
+        ) : null}
 
-      <HomeDecksSection />
+        <HomeDecksSection />
+      </View>
     </ScreenContainer>
   );
 }
@@ -43,9 +43,13 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     alignItems: "center",
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxl,
-    paddingBottom: spacing.xl,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.lg,
+  },
+  body: {
+    width: "100%",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
   },
   errorBox: {
     gap: spacing.md,

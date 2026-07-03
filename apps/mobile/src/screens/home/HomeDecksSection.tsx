@@ -1,12 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import {
   type UserWordStatus,
   type VocabularyItem,
-  type WordType,
   useVocabularyItemsQuery,
 } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
@@ -14,14 +13,6 @@ import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
 const HOME_DECK_PREVIEW_LIMIT = 5;
-
-const CARD_ACCENTS = [
-  { backgroundColor: "#EAF6D9", icon: "calendar-outline" },
-  { backgroundColor: colors.orangeSoft, icon: "briefcase-outline" },
-  { backgroundColor: "#EFE8FF", icon: "cafe-outline" },
-  { backgroundColor: "#E7F2FF", icon: "book-outline" },
-  { backgroundColor: "#E9F8ED", icon: "leaf-outline" },
-] as const;
 
 export function HomeDecksSection() {
   const router = useRouter();
@@ -112,10 +103,9 @@ export function HomeDecksSection() {
 
       {items.length > 0 ? (
         <View style={styles.cardList}>
-          {items.map((item, index) => (
+          {items.map((item) => (
             <HomeDeckCard
               key={item.id}
-              accent={CARD_ACCENTS[index % CARD_ACCENTS.length]}
               item={item}
               onPress={() =>
                 router.push({
@@ -132,36 +122,22 @@ export function HomeDecksSection() {
 }
 
 type HomeDeckCardProps = {
-  accent: (typeof CARD_ACCENTS)[number];
   item: VocabularyItem;
   onPress: () => void;
 };
 
-function HomeDeckCard({ accent, item, onPress }: HomeDeckCardProps) {
+function HomeDeckCard({ item, onPress }: HomeDeckCardProps) {
   const progress = getProgressPercent(item.userWord.status, item.userWord.correctCount, item.userWord.reviewCount);
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
-      onPress={onPress}
-    >
-      <View style={[styles.cardIcon, { backgroundColor: accent.backgroundColor }]}>
-        <Ionicons name={accent.icon} size={30} color={colors.navy} />
-      </View>
-
-      <View style={styles.cardBody}>
-        <View style={styles.cardTitleRow}>
-          <Text numberOfLines={1} style={styles.cardTitle}>
-            {item.sourceText}
-          </Text>
-          {item.userWord.isFavorite ? <Ionicons name="star" size={16} color={colors.orange} /> : null}
-        </View>
-        <Text numberOfLines={1} style={styles.cardSubtitle}>
-          {item.targetText}
-        </Text>
-        <Text style={styles.cardMeta}>
-          {formatWordType(item.wordType)} - {item.cefrLevel ?? "No level"}
+    <View style={styles.card}>
+      <Pressable
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.cardContent, pressed ? styles.pressed : null]}
+        onPress={onPress}
+      >
+        <Text numberOfLines={1} style={styles.cardTitle}>
+          {item.sourceText}
         </Text>
         <View style={styles.progressRow}>
           <View style={styles.progressTrack}>
@@ -169,12 +145,17 @@ function HomeDeckCard({ accent, item, onPress }: HomeDeckCardProps) {
           </View>
           <Text style={styles.progressText}>{progress}%</Text>
         </View>
-      </View>
+      </Pressable>
 
-      <View style={styles.playButton}>
+      <Pressable
+        accessibilityLabel="Open game picker"
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.playButton, pressed ? styles.pressed : null]}
+        onPress={() => Alert.alert("Coming soon", "Game picker modal will be added later.")}
+      >
         <Ionicons name="play" size={18} color={colors.green} />
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 }
 
@@ -213,14 +194,6 @@ function getProgressPercent(status: UserWordStatus, correctCount: number, review
     default:
       return 10;
   }
-}
-
-function formatWordType(wordType: WordType) {
-  return wordType
-    .toLowerCase()
-    .split("_")
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(" ");
 }
 
 const styles = StyleSheet.create({
@@ -273,63 +246,38 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   card: {
-    minHeight: 96,
+    minHeight: 86,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.white,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.05,
     shadowRadius: 18,
     elevation: 2,
   },
-  cardIcon: {
-    width: 70,
-    height: 70,
-    borderRadius: radii.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardBody: {
+  cardContent: {
     flex: 1,
     minWidth: 0,
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
+    justifyContent: "center",
   },
   cardTitle: {
-    flexShrink: 1,
     color: colors.text,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 18,
+    lineHeight: 24,
     fontWeight: typography.weights.black,
-  },
-  cardSubtitle: {
-    marginTop: 1,
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: typography.weights.semibold,
-  },
-  cardMeta: {
-    marginTop: spacing.xs,
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: typography.weights.medium,
   },
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
   },
   progressTrack: {
     flex: 1,
@@ -351,8 +299,8 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   playButton: {
-    width: 42,
-    height: 42,
+    width: 48,
+    height: 48,
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",

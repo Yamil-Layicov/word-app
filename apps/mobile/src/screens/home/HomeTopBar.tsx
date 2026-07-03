@@ -179,12 +179,12 @@ function HomeMenuDrawer({ onClose, visible }: HomeMenuDrawerProps) {
 const styles = StyleSheet.create({
   topBar: {
     width: "100%",
-    maxWidth: 420,
     minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
   },
   iconButton: {
     width: 38,

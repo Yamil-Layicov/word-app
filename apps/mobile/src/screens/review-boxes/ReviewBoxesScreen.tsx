@@ -7,11 +7,10 @@ import { useVocabularyItemsQuery, type VocabularyItem } from "@/entities/vocabul
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   REVIEW_INTERVALS,
+  getScheduledWordStatus,
   startScheduledBox,
   useReviewBoxesState,
   type ReviewInterval,
-  type ReviewIntervalLabel,
-  type ScheduledBoxState,
   type ScheduledWord,
 } from "@/features/review-boxes";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
@@ -22,8 +21,10 @@ type ReviewBoxViewModel = {
   detailLabel: string;
   interval: ReviewInterval;
   kind: "interval";
-  state: ScheduledBoxState | undefined;
+  nextDueAt: number | null;
+  queuedCount: number;
   status: "empty" | "queued" | "started" | "due";
+  dueCount: number;
   wordCount: number;
 };
 
@@ -39,7 +40,7 @@ type ReviewGridBox = ReviewBoxViewModel | MasteredBoxViewModel;
 
 export function ReviewBoxesScreen() {
   const router = useRouter();
-  const { scheduledBoxes, scheduledWords } = useReviewBoxesState();
+  const { scheduledWords } = useReviewBoxesState();
   const [nowMs, setNowMs] = useState(() => Date.now());
   const vocabularyQuery = useVocabularyItemsQuery({ limit: 100 });
   const hasUnauthorizedError = useAuthFailureRedirect(vocabularyQuery.error);
@@ -48,11 +49,10 @@ export function ReviewBoxesScreen() {
       buildReviewGridBoxes(
         REVIEW_INTERVALS,
         scheduledWords,
-        scheduledBoxes,
         vocabularyQuery.data?.items ?? [],
         nowMs,
       ),
-    [nowMs, scheduledBoxes, scheduledWords, vocabularyQuery.data?.items],
+    [nowMs, scheduledWords, vocabularyQuery.data?.items],
   );
 
   useEffect(() => {
@@ -110,7 +110,7 @@ type ReviewBoxCardProps = {
 };
 
 function ReviewBoxCard({ box, onOpen, onStart }: ReviewBoxCardProps) {
-  const canStart = box.kind === "interval" && box.status === "queued";
+  const canStart = box.kind === "interval" && box.queuedCount > 0;
   const isDue = box.kind === "interval" && box.status === "due";
   const isRunning = box.kind === "interval" && box.status === "started";
   const isActive = isRunning || isDue;
@@ -151,8 +151,17 @@ function ReviewBoxCard({ box, onOpen, onStart }: ReviewBoxCardProps) {
           </Text>
           <Text style={styles.activePrompt}>Tap to review words</Text>
           <Text style={styles.activeHint}>
-            {isDue ? "This box is ready now." : "The timer keeps running."}
+            {getActiveHint(box)}
           </Text>
+          {canStart ? (
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.startQueuedButton, pressed ? styles.pressed : null]}
+              onPress={onStart}
+            >
+              <Text style={styles.startQueuedButtonText}>Start queued</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <>
@@ -202,24 +211,23 @@ function BoxIllustration({ due, mastered }: BoxIllustrationProps) {
 function buildReviewGridBoxes(
   intervals: ReviewInterval[],
   scheduledWords: Record<string, ScheduledWord>,
-  scheduledBoxes: Partial<Record<ReviewIntervalLabel, ScheduledBoxState>>,
   vocabularyItems: VocabularyItem[],
   nowMs: number,
 ) {
   const intervalBoxes = intervals.map((interval) => {
-    const scheduledIds = Object.entries(scheduledWords)
-      .filter(([, scheduledWord]) => scheduledWord.intervalLabel === interval.label)
-      .map(([vocabularyItemId]) => vocabularyItemId);
-    const state = scheduledBoxes[interval.label];
-    const timing = getBoxTiming(state, scheduledIds.length, nowMs);
+    const wordsInInterval = Object.values(scheduledWords)
+      .filter((scheduledWord) => scheduledWord.intervalLabel === interval.label);
+    const timing = getBoxTiming(wordsInInterval, nowMs);
 
     return {
       detailLabel: timing.detailLabel,
       interval,
       kind: "interval" as const,
-      state,
+      nextDueAt: timing.nextDueAt,
+      queuedCount: timing.queuedCount,
       status: timing.status,
-      wordCount: scheduledIds.length,
+      dueCount: timing.dueCount,
+      wordCount: wordsInInterval.length,
     };
   });
   const masteredItems = vocabularyItems.filter((item) => item.userWord.status === "MASTERED");
@@ -237,36 +245,58 @@ function buildReviewGridBoxes(
 }
 
 function getBoxTiming(
-  state: ScheduledBoxState | undefined,
-  wordCount: number,
+  scheduledWords: ScheduledWord[],
   nowMs: number,
-): Pick<ReviewBoxViewModel, "detailLabel" | "status"> {
+): Pick<ReviewBoxViewModel, "detailLabel" | "dueCount" | "nextDueAt" | "queuedCount" | "status"> {
+  const wordCount = scheduledWords.length;
+
   if (wordCount === 0) {
     return {
       detailLabel: "Choose words from a deck to fill this box.",
+      dueCount: 0,
+      nextDueAt: null,
+      queuedCount: 0,
       status: "empty",
     };
   }
 
-  if (!state) {
-    return {
-      detailLabel: "Timer will start after you press Start.",
-      status: "queued",
-    };
-  }
+  const queuedCount = scheduledWords.filter((scheduledWord) => getScheduledWordStatus(scheduledWord, nowMs) === "queued").length;
+  const dueCount = scheduledWords.filter((scheduledWord) => getScheduledWordStatus(scheduledWord, nowMs) === "due").length;
+  const startedWords = scheduledWords.filter((scheduledWord) => getScheduledWordStatus(scheduledWord, nowMs) === "started");
+  const nextDueAt = startedWords.reduce<number | null>((currentMin, scheduledWord) => {
+    if (!scheduledWord.dueAt) {
+      return currentMin;
+    }
 
-  const remainingMs = state.dueAt - nowMs;
+    return currentMin === null ? scheduledWord.dueAt : Math.min(currentMin, scheduledWord.dueAt);
+  }, null);
 
-  if (remainingMs <= 0) {
+  if (dueCount > 0) {
     return {
-      detailLabel: "Ready to review.",
+      detailLabel: `${dueCount} due now`,
+      dueCount,
+      nextDueAt,
+      queuedCount,
       status: "due",
     };
   }
 
+  if (nextDueAt) {
+    return {
+      detailLabel: `${formatRemainingTime(nextDueAt - nowMs)} next due`,
+      dueCount,
+      nextDueAt,
+      queuedCount,
+      status: "started",
+    };
+  }
+
   return {
-    detailLabel: formatRemainingTime(remainingMs),
-    status: "started",
+    detailLabel: `${queuedCount} queued. Start when ready.`,
+    dueCount,
+    nextDueAt: null,
+    queuedCount,
+    status: "queued",
   };
 }
 
@@ -312,10 +342,22 @@ function getActiveCountdownLabel(box: ReviewGridBox) {
   }
 
   if (box.status === "started") {
-    return box.detailLabel.replace(/\.$/, "");
+    return box.detailLabel.replace(" next due", "");
   }
 
   return box.detailLabel;
+}
+
+function getActiveHint(box: ReviewGridBox) {
+  if (box.kind !== "interval") {
+    return "";
+  }
+
+  if (box.status === "due") {
+    return box.queuedCount > 0 ? `${box.queuedCount} queued words are waiting.` : "This box is ready now.";
+  }
+
+  return box.queuedCount > 0 ? `${box.queuedCount} queued words are waiting.` : "Each word keeps its own timer.";
 }
 
 function getBoxCountLabel(wordCount: number) {
@@ -538,6 +580,20 @@ const styles = StyleSheet.create({
   startButtonText: {
     color: colors.white,
     fontSize: 14,
+    fontWeight: typography.weights.black,
+  },
+  startQueuedButton: {
+    minHeight: 28,
+    borderRadius: radii.pill,
+    backgroundColor: colors.orange,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.xs,
+  },
+  startQueuedButtonText: {
+    color: colors.white,
+    fontSize: 11,
     fontWeight: typography.weights.black,
   },
   pressed: {

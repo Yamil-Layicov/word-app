@@ -1,12 +1,16 @@
 export {
   REVIEW_INTERVALS,
+  answerScheduledWord,
+  getScheduledWordStatus,
   removeScheduledVocabularyItem,
   scheduleVocabularyItem,
+  scheduleVocabularyItemWithTimer,
   startScheduledBox,
   useReviewBoxesState,
+  type ReviewAnswerQuality,
   type ReviewInterval,
   type ReviewIntervalLabel,
   type ReviewBoxesState,
-  type ScheduledBoxState,
   type ScheduledWord,
+  type ScheduledWordState,
 } from "./schedule-store";

@@ -8,19 +8,21 @@ export type ReviewInterval = {
   helperText: string;
 };
 
+export type ScheduledWordState = "queued" | "started";
+export type ScheduledWordComputedStatus = ScheduledWordState | "due";
+
 export type ScheduledWord = {
   intervalLabel: ReviewIntervalLabel;
-};
-
-export type ScheduledBoxState = {
-  startedAt: number;
-  dueAt: number;
+  dueAt: number | null;
+  startedAt: number | null;
+  state: ScheduledWordState;
 };
 
 export type ReviewBoxesState = {
-  scheduledBoxes: Partial<Record<ReviewIntervalLabel, ScheduledBoxState>>;
   scheduledWords: Record<string, ScheduledWord>;
 };
+
+export type ReviewAnswerQuality = "again" | "hard" | "good" | "easy" | "known";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
@@ -34,7 +36,6 @@ export const REVIEW_INTERVALS: ReviewInterval[] = [
 ];
 
 let state: ReviewBoxesState = {
-  scheduledBoxes: {},
   scheduledWords: {},
 };
 
@@ -45,11 +46,62 @@ export function useReviewBoxesState() {
 }
 
 export function scheduleVocabularyItem(vocabularyItemId: string, intervalLabel: ReviewIntervalLabel) {
+  scheduleWord(vocabularyItemId, intervalLabel, false);
+}
+
+export function scheduleVocabularyItemWithTimer(vocabularyItemId: string, intervalLabel: ReviewIntervalLabel) {
+  scheduleWord(vocabularyItemId, intervalLabel, true);
+}
+
+export function answerScheduledWord(vocabularyItemId: string, quality: ReviewAnswerQuality) {
+  switch (quality) {
+    case "again":
+      scheduleVocabularyItemWithTimer(vocabularyItemId, "1 hour");
+      break;
+    case "hard":
+      scheduleVocabularyItemWithTimer(vocabularyItemId, "6 hours");
+      break;
+    case "good":
+      scheduleVocabularyItemWithTimer(vocabularyItemId, "1 day");
+      break;
+    case "easy":
+      scheduleVocabularyItemWithTimer(vocabularyItemId, "3 days");
+      break;
+    case "known":
+      removeScheduledVocabularyItem(vocabularyItemId);
+      break;
+  }
+}
+
+export function getReviewInterval(label: ReviewIntervalLabel) {
+  return REVIEW_INTERVALS.find((interval) => interval.label === label);
+}
+
+export function getScheduledWordStatus(
+  scheduledWord: ScheduledWord,
+  nowMs: number,
+): ScheduledWordComputedStatus {
+  if (scheduledWord.state === "queued" || !scheduledWord.dueAt) {
+    return "queued";
+  }
+
+  return scheduledWord.dueAt <= nowMs ? "due" : "started";
+}
+
+function scheduleWord(vocabularyItemId: string, intervalLabel: ReviewIntervalLabel, autoStart: boolean) {
+  const nowMs = Date.now();
+  const interval = getReviewInterval(intervalLabel);
+
   updateState({
     ...state,
     scheduledWords: {
       ...state.scheduledWords,
-      [vocabularyItemId]: { intervalLabel },
+      [vocabularyItemId]: {
+        intervalLabel,
+        state: autoStart ? "started" : "queued",
+        startedAt: autoStart ? nowMs : null,
+        dueAt: autoStart && interval ? nowMs + interval.durationMs : null,
+      },
     },
   });
 }
@@ -66,16 +118,27 @@ export function removeScheduledVocabularyItem(vocabularyItemId: string) {
 
 export function startScheduledBox(interval: ReviewInterval) {
   const startedAt = Date.now();
+  const nextScheduledWords = Object.fromEntries(
+    Object.entries(state.scheduledWords).map(([vocabularyItemId, scheduledWord]) => {
+      if (scheduledWord.intervalLabel !== interval.label || scheduledWord.state !== "queued") {
+        return [vocabularyItemId, scheduledWord];
+      }
+
+      return [
+        vocabularyItemId,
+        {
+          ...scheduledWord,
+          state: "started" as const,
+          startedAt,
+          dueAt: startedAt + interval.durationMs,
+        },
+      ];
+    }),
+  );
 
   updateState({
     ...state,
-    scheduledBoxes: {
-      ...state.scheduledBoxes,
-      [interval.label]: {
-        startedAt,
-        dueAt: startedAt + interval.durationMs,
-      },
-    },
+    scheduledWords: nextScheduledWords,
   });
 }
 

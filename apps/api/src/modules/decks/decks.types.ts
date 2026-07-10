@@ -6,14 +6,25 @@ import type {
   WordType,
 } from '@prisma/client';
 
-export type VocabularyExampleModel = {
+export type DeckModel = {
+  id: string;
+  userId: string;
+  languagePairId: string;
+  title: string;
+  description: string | null;
+  isDefault: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type DeckVocabularyExampleModel = {
   id: string;
   sourceSentence: string;
   targetSentence: string;
   createdAt: Date;
 };
 
-export type VocabularyItemModel = {
+export type DeckVocabularyItemModel = {
   id: string;
   languagePairId: string;
   sourceText: string;
@@ -25,10 +36,10 @@ export type VocabularyItemModel = {
   visibility: AudienceScope;
   isActive: boolean;
   createdAt: Date;
-  examples: VocabularyExampleModel[];
+  examples: DeckVocabularyExampleModel[];
 };
 
-export type UserWordModel = {
+export type DeckUserWordModel = {
   id: string;
   vocabularyItemId: string;
   status: UserWordStatus;
@@ -42,7 +53,33 @@ export type UserWordModel = {
   createdAt: Date;
 };
 
-export type VocabularyItemResponse = {
+export type DeckCardItemResult = {
+  deckCardId: string;
+  createdAt: Date;
+  userWord: DeckUserWordModel;
+  vocabularyItem: DeckVocabularyItemModel;
+};
+
+export type DeckResult = {
+  deck: DeckModel;
+  cards: DeckCardItemResult[];
+};
+
+export type DeckSummaryResponse = {
+  id: string;
+  title: string;
+  description: string | null;
+  isDefault: boolean;
+  wordCount: number;
+  masteryScore: number;
+  maxMasteryScore: number;
+  progressPercent: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type DeckWordResponse = {
+  deckCardId: string;
   id: string;
   languagePairId: string;
   sourceText: string;
@@ -53,29 +90,20 @@ export type VocabularyItemResponse = {
   note: string | null;
   visibility: AudienceScope;
   isActive: boolean;
-  examples: VocabularyExampleModel[];
-  userWord: UserWordModel;
+  examples: DeckVocabularyExampleModel[];
+  userWord: DeckUserWordModel;
   createdAt: Date;
 };
 
-export type ListVocabularyItemsResponse = {
-  items: VocabularyItemResponse[];
-  nextCursor: string | null;
+export type DeckDetailResponse = DeckSummaryResponse & {
+  items: DeckWordResponse[];
 };
 
-export type CreateVocabularyItemResult = {
-  vocabularyItem: VocabularyItemModel;
-  userWord: UserWordModel;
+export type DecksResponse = {
+  items: DeckSummaryResponse[];
 };
 
-export type VocabularyListItemResult = CreateVocabularyItemResult;
-
-export type ListVocabularyItemsResult = {
-  items: VocabularyListItemResult[];
-  nextCursor: string | null;
-};
-
-export type VocabularyUserContext = {
+export type DeckUserContext = {
   status: UserStatus;
   profile: {
     activeLanguagePairId: string | null;

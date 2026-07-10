@@ -61,6 +61,22 @@ enum ReviewRating {
   EASY
 }
 
+enum ScheduledReviewInterval {
+  ONE_HOUR
+  SIX_HOURS
+  ONE_DAY
+  THREE_DAYS
+  ONE_WEEK
+}
+
+enum ScheduledReviewState {
+  QUEUED
+  STARTED
+  DUE
+  COMPLETED
+  CANCELLED
+}
+
 enum PracticeMode {
   FLASHCARD
   TYPING
@@ -86,6 +102,8 @@ model User {
   userWords              UserWord[]
   reviewLogs             ReviewLog[]
   practiceLogs           PracticeLog[]
+  userWordSchedules      UserWordSchedule[]
+  decks                  Deck[]
 }
 
 model UserProfile {
@@ -174,6 +192,7 @@ model LanguagePair {
   activeProfiles    UserProfile[]      @relation("ActiveLanguagePair")
   userLanguagePairs UserLanguagePair[]
   vocabularyItems   VocabularyItem[]
+  decks             Deck[]
 
   @@unique([sourceLanguageId, targetLanguageId])
 }
@@ -230,6 +249,7 @@ model UserWord {
   isFavorite       Boolean        @default(false)
   easeFactor       Float          @default(2.5)
   intervalDays     Int            @default(0)
+  masteryStep      Int            @default(0)
   reviewCount      Int            @default(0)
   correctCount     Int            @default(0)
   wrongCount       Int            @default(0)
@@ -242,12 +262,72 @@ model UserWord {
   vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
   reviewLogs     ReviewLog[]
   practiceLogs   PracticeLog[]
+  schedules       UserWordSchedule[]
+  deckCards       DeckCard[]
 
   @@unique([userId, vocabularyItemId])
   @@index([userId])
   @@index([vocabularyItemId])
   @@index([status])
   @@index([nextReviewAt])
+}
+
+model Deck {
+  id             String   @id @default(cuid())
+  userId         String
+  languagePairId String
+  title          String
+  description    String?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  languagePair LanguagePair @relation(fields: [languagePairId], references: [id], onDelete: Cascade)
+  cards        DeckCard[]
+
+  @@index([userId])
+  @@index([languagePairId])
+  @@index([userId, languagePairId])
+  @@index([userId, languagePairId, isDefault])
+}
+
+model DeckCard {
+  id         String   @id @default(cuid())
+  deckId     String
+  userWordId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  deck     Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  userWord UserWord @relation(fields: [userWordId], references: [id], onDelete: Cascade)
+
+  @@unique([deckId, userWordId])
+  @@index([deckId])
+  @@index([userWordId])
+}
+
+model UserWordSchedule {
+  id          String                  @id @default(cuid())
+  userId      String
+  userWordId  String
+  state       ScheduledReviewState    @default(QUEUED)
+  interval    ScheduledReviewInterval
+  startedAt   DateTime?
+  dueAt       DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userWord UserWord @relation(fields: [userWordId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userWordId])
+  @@index([state])
+  @@index([dueAt])
+  @@index([userId, state, dueAt])
 }
 
 model ReviewLog {

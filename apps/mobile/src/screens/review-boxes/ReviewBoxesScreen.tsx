@@ -7,11 +7,10 @@ import { useVocabularyItemsQuery, type VocabularyItem } from "@/entities/vocabul
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   REVIEW_INTERVALS,
-  getScheduledWordStatus,
-  startScheduledBox,
-  useReviewBoxesState,
+  useScheduledReviewBoxesQuery,
+  useStartScheduledReviewBox,
   type ReviewInterval,
-  type ScheduledWord,
+  type ScheduledReviewBox,
 } from "@/features/review-boxes";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
@@ -40,19 +39,24 @@ type ReviewGridBox = ReviewBoxViewModel | MasteredBoxViewModel;
 
 export function ReviewBoxesScreen() {
   const router = useRouter();
-  const { scheduledWords } = useReviewBoxesState();
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const scheduledBoxesQuery = useScheduledReviewBoxesQuery();
+  const startScheduledReviewBoxMutation = useStartScheduledReviewBox();
   const vocabularyQuery = useVocabularyItemsQuery({ limit: 100 });
-  const hasUnauthorizedError = useAuthFailureRedirect(vocabularyQuery.error);
+  const hasUnauthorizedError = useAuthFailureRedirect(
+    vocabularyQuery.error ??
+      scheduledBoxesQuery.error ??
+      startScheduledReviewBoxMutation.error,
+  );
   const boxes = useMemo(
     () =>
       buildReviewGridBoxes(
         REVIEW_INTERVALS,
-        scheduledWords,
+        scheduledBoxesQuery.data?.boxes ?? [],
         vocabularyQuery.data?.items ?? [],
         nowMs,
       ),
-    [nowMs, scheduledWords, vocabularyQuery.data?.items],
+    [nowMs, scheduledBoxesQuery.data?.boxes, vocabularyQuery.data?.items],
   );
 
   useEffect(() => {
@@ -68,23 +72,30 @@ export function ReviewBoxesScreen() {
         <Text style={styles.subtitle}>Start a box when you are ready. Timers do not run before Start.</Text>
       </View>
 
-      {vocabularyQuery.isError && !hasUnauthorizedError ? (
+      {(vocabularyQuery.isError || scheduledBoxesQuery.isError) && !hasUnauthorizedError ? (
         <View style={styles.stateBox}>
-          <Text style={styles.stateTitle}>Could not load word previews.</Text>
-          <Button title="Try again" variant="secondary" onPress={() => void vocabularyQuery.refetch()} />
+          <Text style={styles.stateTitle}>Could not load review boxes.</Text>
+          <Button
+            title="Try again"
+            variant="secondary"
+            onPress={() => {
+              void vocabularyQuery.refetch();
+              void scheduledBoxesQuery.refetch();
+            }}
+          />
         </View>
       ) : null}
 
       <View style={styles.boxList}>
         {boxes.map((box) => (
           <ReviewBoxCard
-            key={box.kind === "interval" ? box.interval.label : box.title}
+            key={box.kind === "interval" ? box.interval.apiInterval : box.title}
             box={box}
             onOpen={() => {
               router.push({
                 pathname: "/decks/[boxId]",
                 params: {
-                  boxId: box.kind === "interval" ? box.interval.label : "mastered",
+                  boxId: box.kind === "interval" ? box.interval.apiInterval : "mastered",
                 },
               });
             }}
@@ -93,9 +104,10 @@ export function ReviewBoxesScreen() {
                 return;
               }
 
-              startScheduledBox(box.interval);
+              startScheduledReviewBoxMutation.mutate(box.interval.apiInterval);
               setNowMs(Date.now());
             }}
+            startPending={startScheduledReviewBoxMutation.isPending}
           />
         ))}
       </View>
@@ -107,9 +119,10 @@ type ReviewBoxCardProps = {
   box: ReviewGridBox;
   onOpen: () => void;
   onStart: () => void;
+  startPending: boolean;
 };
 
-function ReviewBoxCard({ box, onOpen, onStart }: ReviewBoxCardProps) {
+function ReviewBoxCard({ box, onOpen, onStart, startPending }: ReviewBoxCardProps) {
   const canStart = box.kind === "interval" && box.queuedCount > 0;
   const isDue = box.kind === "interval" && box.status === "due";
   const isRunning = box.kind === "interval" && box.status === "started";
@@ -156,6 +169,7 @@ function ReviewBoxCard({ box, onOpen, onStart }: ReviewBoxCardProps) {
           {canStart ? (
             <Pressable
               accessibilityRole="button"
+              disabled={startPending}
               style={({ pressed }) => [styles.startQueuedButton, pressed ? styles.pressed : null]}
               onPress={onStart}
             >
@@ -170,6 +184,7 @@ function ReviewBoxCard({ box, onOpen, onStart }: ReviewBoxCardProps) {
           {canStart ? (
             <Pressable
               accessibilityRole="button"
+              disabled={startPending}
               style={({ pressed }) => [
                 styles.startButton,
                 pressed ? styles.pressed : null,
@@ -210,14 +225,13 @@ function BoxIllustration({ due, mastered }: BoxIllustrationProps) {
 
 function buildReviewGridBoxes(
   intervals: ReviewInterval[],
-  scheduledWords: Record<string, ScheduledWord>,
+  scheduledBoxes: ScheduledReviewBox[],
   vocabularyItems: VocabularyItem[],
   nowMs: number,
 ) {
   const intervalBoxes = intervals.map((interval) => {
-    const wordsInInterval = Object.values(scheduledWords)
-      .filter((scheduledWord) => scheduledWord.intervalLabel === interval.label);
-    const timing = getBoxTiming(wordsInInterval, nowMs);
+    const scheduledBox = scheduledBoxes.find((box) => box.interval === interval.apiInterval);
+    const timing = getBoxTiming(scheduledBox, nowMs);
 
     return {
       detailLabel: timing.detailLabel,
@@ -227,7 +241,7 @@ function buildReviewGridBoxes(
       queuedCount: timing.queuedCount,
       status: timing.status,
       dueCount: timing.dueCount,
-      wordCount: wordsInInterval.length,
+      wordCount: scheduledBox?.totalWords ?? 0,
     };
   });
   const masteredItems = vocabularyItems.filter((item) => item.userWord.status === "MASTERED");
@@ -245,10 +259,10 @@ function buildReviewGridBoxes(
 }
 
 function getBoxTiming(
-  scheduledWords: ScheduledWord[],
+  scheduledBox: ScheduledReviewBox | undefined,
   nowMs: number,
 ): Pick<ReviewBoxViewModel, "detailLabel" | "dueCount" | "nextDueAt" | "queuedCount" | "status"> {
-  const wordCount = scheduledWords.length;
+  const wordCount = scheduledBox?.totalWords ?? 0;
 
   if (wordCount === 0) {
     return {
@@ -260,16 +274,14 @@ function getBoxTiming(
     };
   }
 
-  const queuedCount = scheduledWords.filter((scheduledWord) => getScheduledWordStatus(scheduledWord, nowMs) === "queued").length;
-  const dueCount = scheduledWords.filter((scheduledWord) => getScheduledWordStatus(scheduledWord, nowMs) === "due").length;
-  const startedWords = scheduledWords.filter((scheduledWord) => getScheduledWordStatus(scheduledWord, nowMs) === "started");
-  const nextDueAt = startedWords.reduce<number | null>((currentMin, scheduledWord) => {
-    if (!scheduledWord.dueAt) {
-      return currentMin;
-    }
-
-    return currentMin === null ? scheduledWord.dueAt : Math.min(currentMin, scheduledWord.dueAt);
-  }, null);
+  const queuedCount = scheduledBox?.queuedWords ?? 0;
+  const parsedNextDueAt = scheduledBox?.nextDueAt ? Date.parse(scheduledBox.nextDueAt) : null;
+  const elapsedStartedWords =
+    parsedNextDueAt !== null && parsedNextDueAt <= nowMs
+      ? scheduledBox?.startedWords ?? 0
+      : 0;
+  const dueCount = Math.max(scheduledBox?.dueWords ?? 0, elapsedStartedWords);
+  const nextDueAt = dueCount > 0 ? null : parsedNextDueAt;
 
   if (dueCount > 0) {
     return {

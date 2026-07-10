@@ -93,6 +93,7 @@ const userWordSelect = {
   vocabularyItemId: true,
   status: true,
   isFavorite: true,
+  masteryStep: true,
   reviewCount: true,
   correctCount: true,
   wrongCount: true,

@@ -27,6 +27,7 @@ export type VocabularyUserWord = {
   vocabularyItemId: string;
   status: UserWordStatus;
   isFavorite: boolean;
+  masteryStep: number;
   reviewCount: number;
   correctCount: number;
   wrongCount: number;

@@ -30,6 +30,7 @@ export function toVocabularyItemResponse(
       vocabularyItemId: result.userWord.vocabularyItemId,
       status: result.userWord.status,
       isFavorite: result.userWord.isFavorite,
+      masteryStep: result.userWord.masteryStep,
       reviewCount: result.userWord.reviewCount,
       correctCount: result.userWord.correctCount,
       wrongCount: result.userWord.wrongCount,

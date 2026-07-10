@@ -101,6 +101,10 @@ export function VocabularyWordRow({
 }
 
 export function getEstimatedMasteryStep(item: VocabularyItem) {
+  if (typeof item.userWord.masteryStep === "number") {
+    return Math.min(5, Math.max(0, item.userWord.masteryStep));
+  }
+
   if (item.userWord.status === "MASTERED") {
     return 5;
   }

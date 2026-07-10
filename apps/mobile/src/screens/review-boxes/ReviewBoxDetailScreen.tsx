@@ -7,35 +7,46 @@ import { type VocabularyItem, useVocabularyItemsQuery } from "@/entities/vocabul
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   REVIEW_INTERVALS,
-  answerScheduledWord,
-  getScheduledWordStatus,
-  startScheduledBox,
-  useReviewBoxesState,
-  type ReviewAnswerQuality,
-  type ScheduledWord,
+  getReviewIntervalByApiInterval,
+  useAnswerScheduledReview,
+  useScheduledReviewBoxDetailQuery,
+  useStartScheduledReviewBox,
+  type ScheduledReviewAnswerQuality,
+  type ScheduledReviewInterval,
+  type ScheduledReviewItem,
 } from "@/features/review-boxes";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 import { VocabularyWordRow } from "@/screens/vocabulary/VocabularyWordRow";
 
+const EMPTY_SCHEDULED_ITEMS: ScheduledReviewItem[] = [];
+
 export function ReviewBoxDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ boxId?: string | string[] }>();
   const boxId = getParamValue(params.boxId);
+  const intervalId = parseScheduledReviewInterval(boxId);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const { scheduledWords } = useReviewBoxesState();
+  const boxDetailQuery = useScheduledReviewBoxDetailQuery(intervalId);
+  const answerScheduledReviewMutation = useAnswerScheduledReview();
+  const startScheduledReviewBoxMutation = useStartScheduledReviewBox();
   const vocabularyQuery = useVocabularyItemsQuery({ limit: 100 });
-  const hasUnauthorizedError = useAuthFailureRedirect(vocabularyQuery.error);
-  const interval = REVIEW_INTERVALS.find((item) => item.label === boxId);
+  const hasUnauthorizedError = useAuthFailureRedirect(
+    vocabularyQuery.error ??
+      boxDetailQuery.error ??
+      answerScheduledReviewMutation.error ??
+      startScheduledReviewBoxMutation.error,
+  );
+  const interval = intervalId ? getReviewIntervalByApiInterval(intervalId) : undefined;
   const isMasteredBox = boxId === "mastered";
   const vocabularyItems = vocabularyQuery.data?.items ?? [];
-  const items = isMasteredBox
-    ? vocabularyItems.filter((item) => item.userWord.status === "MASTERED")
-    : vocabularyItems.filter((item) => scheduledWords[item.id]?.intervalLabel === interval?.label);
+  const masteredItems = vocabularyItems.filter((item) => item.userWord.status === "MASTERED");
+  const scheduledItems = boxDetailQuery.data?.items ?? EMPTY_SCHEDULED_ITEMS;
+  const visibleItemCount = isMasteredBox ? masteredItems.length : scheduledItems.length;
   const groupedItems = useMemo(
-    () => groupScheduledItems(items, scheduledWords, nowMs),
-    [items, nowMs, scheduledWords],
+    () => (isMasteredBox ? emptyScheduledItemGroups() : groupScheduledItems(scheduledItems, nowMs)),
+    [isMasteredBox, scheduledItems, nowMs],
   );
   const boxSummary = useMemo(
     () => getBoxSummary(groupedItems, nowMs),
@@ -83,8 +94,9 @@ export function ReviewBoxDetailScreen() {
             {groupedItems.queued.length > 0 ? (
               <Pressable
                 accessibilityRole="button"
+                disabled={startScheduledReviewBoxMutation.isPending}
                 style={({ pressed }) => [styles.summaryStartButton, pressed ? styles.pressed : null]}
-                onPress={() => startScheduledBox(interval)}
+                onPress={() => startScheduledReviewBoxMutation.mutate(interval.apiInterval)}
               >
                 <Text style={styles.summaryStartButtonText}>Start queued</Text>
               </Pressable>
@@ -99,25 +111,34 @@ export function ReviewBoxDetailScreen() {
         </View>
       ) : null}
 
-      {vocabularyQuery.isLoading ? <StateBox title="Loading words..." /> : null}
+      {(isMasteredBox ? vocabularyQuery.isLoading : boxDetailQuery.isLoading) ? (
+        <StateBox title="Loading words..." />
+      ) : null}
 
-      {vocabularyQuery.isError && !hasUnauthorizedError ? (
+      {((isMasteredBox && vocabularyQuery.isError) || (!isMasteredBox && boxDetailQuery.isError)) &&
+      !hasUnauthorizedError ? (
         <StateBox
           title="Could not load words."
           actionTitle="Try again"
-          onAction={() => void vocabularyQuery.refetch()}
+          onAction={() => {
+            if (isMasteredBox) {
+              void vocabularyQuery.refetch();
+            } else {
+              void boxDetailQuery.refetch();
+            }
+          }}
         />
       ) : null}
 
-      {!vocabularyQuery.isLoading &&
-      !vocabularyQuery.isError &&
+      {!(isMasteredBox ? vocabularyQuery.isLoading : boxDetailQuery.isLoading) &&
+      !(isMasteredBox ? vocabularyQuery.isError : boxDetailQuery.isError) &&
       (interval || isMasteredBox) &&
-      items.length === 0 ? (
+      visibleItemCount === 0 ? (
         <StateBox title="No words in this box yet." />
       ) : null}
 
       {isMasteredBox ? (
-        items.map((item) => (
+        masteredItems.map((item) => (
           <VocabularyWordRow
             key={item.id}
             item={item}
@@ -136,7 +157,10 @@ export function ReviewBoxDetailScreen() {
             items={groupedItems.due}
             nowMs={nowMs}
             title="Due now"
-            onAnswer={answerScheduledWord}
+            answerPending={answerScheduledReviewMutation.isPending}
+            onAnswer={(scheduleId, quality) =>
+              answerScheduledReviewMutation.mutate({ scheduleId, quality })
+            }
             onOpenWord={(id) =>
               router.push({
                 pathname: "/vocabulary/[id]",
@@ -175,8 +199,7 @@ export function ReviewBoxDetailScreen() {
 }
 
 type GroupedScheduledItem = {
-  item: VocabularyItem;
-  scheduledWord: ScheduledWord;
+  item: ScheduledReviewItem;
 };
 
 type ScheduledItemGroups = {
@@ -186,15 +209,26 @@ type ScheduledItemGroups = {
 };
 
 type ScheduledSectionProps = {
+  answerPending?: boolean;
   emptyTitle: string;
   items: GroupedScheduledItem[];
   nowMs: number;
-  onAnswer?: (vocabularyItemId: string, quality: ReviewAnswerQuality) => void;
+  onAnswer?: (scheduleId: string, quality: ScheduledReviewAnswerQuality) => void;
   onOpenWord: (id: string) => void;
   title: string;
 };
 
-function ScheduledSection({ emptyTitle, items, nowMs, onAnswer, onOpenWord, title }: ScheduledSectionProps) {
+function ScheduledSection({
+  answerPending = false,
+  emptyTitle,
+  items,
+  nowMs,
+  onAnswer,
+  onOpenWord,
+  title,
+}: ScheduledSectionProps) {
+  const [visibleAnswers, setVisibleAnswers] = useState<Record<string, boolean>>({});
+
   if (items.length === 0) {
     return (
       <View style={styles.sectionBlock}>
@@ -207,49 +241,140 @@ function ScheduledSection({ emptyTitle, items, nowMs, onAnswer, onOpenWord, titl
   return (
     <View style={styles.sectionBlock}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      {items.map(({ item, scheduledWord }) => (
-        <View key={item.id} style={styles.scheduledWordBlock}>
+      {items.map(({ item }) => (
+        <View key={item.scheduleId} style={styles.scheduledWordBlock}>
           <View style={styles.wordStatusRow}>
-            <Text style={styles.wordStatusText}>{getWordStatusLabel(scheduledWord, nowMs)}</Text>
+            <Text style={styles.wordStatusText}>{getWordStatusLabel(item, nowMs)}</Text>
           </View>
-          <VocabularyWordRow item={item} onPress={() => onOpenWord(item.id)} />
           {onAnswer ? (
-            <ReviewAnswerBar
-              onAnswer={(quality) => onAnswer(item.id, quality)}
+            <ReviewPromptCard
+              answerPending={answerPending}
+              answerVisible={Boolean(visibleAnswers[item.scheduleId])}
+              item={item}
+              onAnswer={(quality) => {
+                setVisibleAnswers((current) => {
+                  const next = { ...current };
+                  delete next[item.scheduleId];
+
+                  return next;
+                });
+                onAnswer(item.scheduleId, quality);
+              }}
+              onOpenWord={() => onOpenWord(item.vocabularyItemId)}
+              onShowAnswer={() =>
+                setVisibleAnswers((current) => ({
+                  ...current,
+                  [item.scheduleId]: true,
+                }))
+              }
             />
-          ) : null}
+          ) : (
+            <VocabularyWordRow
+              item={toVocabularyItem(item)}
+              onPress={() => onOpenWord(item.vocabularyItemId)}
+            />
+          )}
         </View>
       ))}
     </View>
   );
 }
 
-type ReviewAnswerBarProps = {
-  onAnswer: (quality: ReviewAnswerQuality) => void;
+type ReviewPromptCardProps = {
+  answerPending: boolean;
+  answerVisible: boolean;
+  item: ScheduledReviewItem;
+  onAnswer: (quality: ScheduledReviewAnswerQuality) => void;
+  onOpenWord: () => void;
+  onShowAnswer: () => void;
 };
 
-function ReviewAnswerBar({ onAnswer }: ReviewAnswerBarProps) {
+function ReviewPromptCard({
+  answerPending,
+  answerVisible,
+  item,
+  onAnswer,
+  onOpenWord,
+  onShowAnswer,
+}: ReviewPromptCardProps) {
+  return (
+    <View style={styles.reviewPromptCard}>
+      <Pressable
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.reviewPromptMain, pressed ? styles.pressed : null]}
+        onPress={onOpenWord}
+      >
+        <View style={styles.reviewPromptColumn}>
+          <Text style={styles.reviewPromptLabel}>Question</Text>
+          <Text numberOfLines={2} style={styles.reviewSourceText}>
+            {item.sourceText}
+          </Text>
+        </View>
+
+        <View style={styles.reviewDivider} />
+
+        <View style={styles.reviewPromptColumn}>
+          <Text style={styles.reviewPromptLabel}>Answer</Text>
+          {answerVisible ? (
+            <Text numberOfLines={2} style={styles.reviewTargetText}>
+              {item.targetText}
+            </Text>
+          ) : (
+            <View style={styles.hiddenAnswerBox}>
+              <Ionicons name="eye-off-outline" size={16} color={colors.textMuted} />
+              <Text style={styles.hiddenAnswerText}>Hidden</Text>
+            </View>
+          )}
+        </View>
+      </Pressable>
+
+      {answerVisible ? (
+        <ReviewAnswerBar disabled={answerPending} onAnswer={onAnswer} />
+      ) : (
+        <View style={styles.showAnswerBar}>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.showAnswerButton, pressed ? styles.pressed : null]}
+            onPress={onShowAnswer}
+          >
+            <Text style={styles.showAnswerButtonText}>Show answer</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+type ReviewAnswerBarProps = {
+  disabled: boolean;
+  onAnswer: (quality: ScheduledReviewAnswerQuality) => void;
+};
+
+function ReviewAnswerBar({ disabled, onAnswer }: ReviewAnswerBarProps) {
   return (
     <View style={styles.answerBar}>
-      <AnswerButton label="Again" tone="danger" onPress={() => onAnswer("again")} />
-      <AnswerButton label="Hard" onPress={() => onAnswer("hard")} />
-      <AnswerButton label="Good" tone="green" onPress={() => onAnswer("good")} />
-      <AnswerButton label="Easy" tone="green" onPress={() => onAnswer("easy")} />
-      <AnswerButton label="I know" tone="navy" onPress={() => onAnswer("known")} />
+      <AnswerButton disabled={disabled} label="Again" tone="danger" onPress={() => onAnswer("AGAIN")} />
+      <AnswerButton disabled={disabled} label="Hard" onPress={() => onAnswer("HARD")} />
+      <AnswerButton disabled={disabled} label="Good" tone="green" onPress={() => onAnswer("GOOD")} />
+      <AnswerButton disabled={disabled} label="Easy" tone="green" onPress={() => onAnswer("EASY")} />
+      <AnswerButton disabled={disabled} label="I know" tone="navy" onPress={() => onAnswer("KNOWN")} />
     </View>
   );
 }
 
 type AnswerButtonProps = {
+  disabled: boolean;
   label: string;
   onPress: () => void;
   tone?: "danger" | "green" | "navy";
 };
 
-function AnswerButton({ label, onPress, tone = "navy" }: AnswerButtonProps) {
+function AnswerButton({ disabled, label, onPress, tone = "navy" }: AnswerButtonProps) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.answerButton,
         tone === "danger" ? styles.answerButtonDanger : null,
@@ -305,25 +430,19 @@ function StateBox({ title, actionTitle, onAction }: StateBoxProps) {
   );
 }
 
-function groupScheduledItems(
-  items: VocabularyItem[],
-  scheduledWords: Record<string, ScheduledWord>,
-  nowMs: number,
-): ScheduledItemGroups {
+function emptyScheduledItemGroups(): ScheduledItemGroups {
+  return { due: [], queued: [], started: [] };
+}
+
+function groupScheduledItems(items: ScheduledReviewItem[], nowMs: number): ScheduledItemGroups {
   return items.reduce<ScheduledItemGroups>(
     (groups, item) => {
-      const scheduledWord = scheduledWords[item.id];
-
-      if (!scheduledWord) {
-        return groups;
-      }
-
-      const status = getScheduledWordStatus(scheduledWord, nowMs);
-      groups[status].push({ item, scheduledWord });
+      const status = getScheduledReviewItemStatus(item, nowMs);
+      groups[status].push({ item });
 
       return groups;
     },
-    { due: [], queued: [], started: [] },
+    emptyScheduledItemGroups(),
   );
 }
 
@@ -348,12 +467,14 @@ function getBoxSummary(groups: ScheduledItemGroups, nowMs: number) {
     return "Review these words, then choose Again, Hard, Good, Easy, or I know.";
   }
 
-  const nextDueAt = groups.started.reduce<number | null>((currentMin, { scheduledWord }) => {
-    if (!scheduledWord.dueAt) {
+  const nextDueAt = groups.started.reduce<number | null>((currentMin, { item }) => {
+    const dueAt = item.dueAt ? Date.parse(item.dueAt) : null;
+
+    if (!dueAt) {
       return currentMin;
     }
 
-    return currentMin === null ? scheduledWord.dueAt : Math.min(currentMin, scheduledWord.dueAt);
+    return currentMin === null ? dueAt : Math.min(currentMin, dueAt);
   }, null);
 
   if (nextDueAt) {
@@ -367,8 +488,8 @@ function getBoxSummary(groups: ScheduledItemGroups, nowMs: number) {
   return "Add words from a deck to fill this box.";
 }
 
-function getWordStatusLabel(scheduledWord: ScheduledWord, nowMs: number) {
-  const status = getScheduledWordStatus(scheduledWord, nowMs);
+function getWordStatusLabel(item: ScheduledReviewItem, nowMs: number) {
+  const status = getScheduledReviewItemStatus(item, nowMs);
 
   if (status === "queued") {
     return "Queued - timer has not started";
@@ -378,9 +499,61 @@ function getWordStatusLabel(scheduledWord: ScheduledWord, nowMs: number) {
     return "Due now - review and choose result";
   }
 
-  return scheduledWord.dueAt
-    ? `Due in ${formatRemainingTime(scheduledWord.dueAt - nowMs)}`
+  return item.dueAt
+    ? `Due in ${formatRemainingTime(Date.parse(item.dueAt) - nowMs)}`
     : "Timer is running";
+}
+
+function getScheduledReviewItemStatus(
+  item: ScheduledReviewItem,
+  nowMs: number,
+): "due" | "queued" | "started" {
+  if (item.state === "QUEUED") {
+    return "queued";
+  }
+
+  if (item.state === "DUE") {
+    return "due";
+  }
+
+  if (item.dueAt && Date.parse(item.dueAt) <= nowMs) {
+    return "due";
+  }
+
+  return "started";
+}
+
+function toVocabularyItem(item: ScheduledReviewItem): VocabularyItem {
+  return {
+    id: item.vocabularyItemId,
+    languagePairId: "",
+    sourceText: item.sourceText,
+    targetText: item.targetText,
+    wordType: item.wordType,
+    cefrLevel: item.cefrLevel,
+    definition: item.definition,
+    note: item.note,
+    visibility: "PRIVATE",
+    isActive: true,
+    examples: item.examples.map((example) => ({
+      ...example,
+      createdAt: "",
+    })),
+    userWord: {
+      id: item.userWordId,
+      vocabularyItemId: item.vocabularyItemId,
+      status: item.status,
+      isFavorite: false,
+      masteryStep: item.masteryStep,
+      reviewCount: item.reviewCount,
+      correctCount: item.correctCount,
+      wrongCount: item.wrongCount,
+      lastReviewedAt: item.lastReviewedAt,
+      nextReviewAt: item.nextReviewAt,
+      createdAt: "",
+    },
+    createdAt: "",
+  };
 }
 
 function formatRemainingTime(valueMs: number) {
@@ -410,6 +583,12 @@ function getParamValue(value: string | string[] | undefined) {
   }
 
   return value;
+}
+
+function parseScheduledReviewInterval(value: string | undefined): ScheduledReviewInterval | undefined {
+  const interval = REVIEW_INTERVALS.find((item) => item.apiInterval === value);
+
+  return interval?.apiInterval;
 }
 
 const styles = StyleSheet.create({
@@ -565,6 +744,81 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontWeight: typography.weights.bold,
+  },
+  reviewPromptCard: {
+    backgroundColor: colors.white,
+  },
+  reviewPromptMain: {
+    minHeight: 96,
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  reviewPromptColumn: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  reviewPromptLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: typography.weights.black,
+    textTransform: "uppercase",
+    marginBottom: spacing.xs,
+  },
+  reviewSourceText: {
+    color: colors.text,
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: typography.weights.semibold,
+  },
+  reviewTargetText: {
+    color: colors.green,
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: typography.weights.semibold,
+  },
+  reviewDivider: {
+    width: 1,
+    backgroundColor: "#F0E8DE",
+  },
+  hiddenAnswerBox: {
+    minHeight: 38,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundSoft,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  hiddenAnswerText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: typography.weights.bold,
+  },
+  showAnswerBar: {
+    borderTopWidth: 1,
+    borderTopColor: "#F0E8DE",
+    backgroundColor: colors.backgroundSoft,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  showAnswerButton: {
+    minHeight: 40,
+    borderRadius: radii.pill,
+    backgroundColor: colors.orange,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  showAnswerButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: typography.weights.black,
   },
   answerBar: {
     flexDirection: "row",

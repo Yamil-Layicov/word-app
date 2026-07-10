@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -13,10 +13,12 @@ import { type VocabularyItem, useInfiniteVocabularyItemsQuery } from "@/entities
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   REVIEW_INTERVALS,
-  removeScheduledVocabularyItem,
-  scheduleVocabularyItem,
-  useReviewBoxesState,
-  type ReviewIntervalLabel,
+  getReviewIntervalByApiInterval,
+  useCancelScheduledReview,
+  useScheduleUserWord,
+  useScheduledReviewsQuery,
+  type ReviewInterval,
+  type ScheduledReviewItem,
 } from "@/features/review-boxes";
 import { useUpdateVocabularyItem } from "@/features/vocabulary";
 import { isApiError } from "@/shared/api/http-error";
@@ -29,31 +31,66 @@ import { VocabularyWordRow } from "./VocabularyWordRow";
 export function VocabularyListScreen() {
   const router = useRouter();
   const [selectedItem, setSelectedItem] = useState<VocabularyItem | null>(null);
-  const { scheduledWords } = useReviewBoxesState();
   const [notice, setNotice] = useState<string | null>(null);
   const updateVocabularyItemMutation = useUpdateVocabularyItem();
+  const scheduleUserWordMutation = useScheduleUserWord();
+  const cancelScheduledReviewMutation = useCancelScheduledReview();
+  const scheduledReviewsQuery = useScheduledReviewsQuery();
   const vocabularyQuery = useInfiniteVocabularyItemsQuery({ limit: 20 });
   const hasUnauthorizedError = useAuthFailureRedirect(
-    vocabularyQuery.error ?? updateVocabularyItemMutation.error,
+    vocabularyQuery.error ??
+      scheduledReviewsQuery.error ??
+      updateVocabularyItemMutation.error ??
+      scheduleUserWordMutation.error ??
+      cancelScheduledReviewMutation.error,
   );
   const items = vocabularyQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const scheduledByVocabularyItemId = useMemo(
+    () =>
+      new Map(
+        (scheduledReviewsQuery.data?.items ?? []).map((item) => [
+          item.vocabularyItemId,
+          item,
+        ]),
+      ),
+    [scheduledReviewsQuery.data?.items],
+  );
 
-  const handleScheduleWord = (item: VocabularyItem, intervalLabel: ReviewIntervalLabel) => {
-    scheduleVocabularyItem(item.id, intervalLabel);
+  const handleScheduleWord = async (item: VocabularyItem, interval: ReviewInterval) => {
+    setNotice(null);
+
+    try {
+      await scheduleUserWordMutation.mutateAsync({
+        userWordId: item.userWord.id,
+        interval: interval.apiInterval,
+      });
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(isApiError(error) ? error.message : "Could not schedule this word.");
+      }
+
+      return;
+    }
+
     setSelectedItem(null);
-    setNotice(`${item.sourceText} added to ${intervalLabel}.`);
+    setNotice(`${item.sourceText} added to ${interval.label}.`);
   };
 
   const handleMarkKnown = async (item: VocabularyItem) => {
     setSelectedItem(null);
     setNotice(null);
+    const scheduledReview = scheduledByVocabularyItemId.get(item.id);
 
     try {
       await updateVocabularyItemMutation.mutateAsync({
         id: item.id,
         data: { status: "MASTERED" },
       });
-      removeScheduledVocabularyItem(item.id);
+
+      if (scheduledReview) {
+        await cancelScheduledReviewMutation.mutateAsync(scheduledReview.scheduleId);
+      }
+
       setNotice(`${item.sourceText} marked as mastered.`);
     } catch (error) {
       if (!isApiError(error) || error.status !== 401) {
@@ -103,7 +140,7 @@ export function VocabularyListScreen() {
         <VocabularyWordRow
           key={item.id}
           item={item}
-          scheduledWord={scheduledWords[item.id]}
+          scheduledWord={toScheduledWordPreview(scheduledByVocabularyItemId.get(item.id))}
           showScheduledOverlay
           onMenuPress={() => setSelectedItem(item)}
           onPress={() =>
@@ -130,7 +167,11 @@ export function VocabularyListScreen() {
 
       <WordActionSheet
         item={selectedItem}
-        isUpdating={updateVocabularyItemMutation.isPending}
+        isUpdating={
+          updateVocabularyItemMutation.isPending ||
+          scheduleUserWordMutation.isPending ||
+          cancelScheduledReviewMutation.isPending
+        }
         onClose={() => setSelectedItem(null)}
         onMarkKnown={(item) => {
           void handleMarkKnown(item);
@@ -146,7 +187,7 @@ type WordActionSheetProps = {
   isUpdating: boolean;
   onClose: () => void;
   onMarkKnown: (item: VocabularyItem) => void;
-  onSchedule: (item: VocabularyItem, intervalLabel: ReviewIntervalLabel) => void;
+  onSchedule: (item: VocabularyItem, interval: ReviewInterval) => void;
 };
 
 function WordActionSheet({
@@ -175,7 +216,7 @@ function WordActionSheet({
                   key={interval.label}
                   icon={interval.label.includes("hour") ? "time-outline" : "calendar-outline"}
                   label={`Review in ${interval.label}`}
-                  onPress={() => onSchedule(item, interval.label)}
+                  onPress={() => onSchedule(item, interval)}
                 />
               ))}
               <ActionButton
@@ -235,6 +276,18 @@ function StateBox({ title, actionTitle, onAction }: StateBoxProps) {
       ) : null}
     </View>
   );
+}
+
+function toScheduledWordPreview(scheduledReview: ScheduledReviewItem | undefined) {
+  if (!scheduledReview) {
+    return undefined;
+  }
+
+  return {
+    intervalLabel:
+      getReviewIntervalByApiInterval(scheduledReview.interval)?.label ??
+      scheduledReview.interval,
+  };
 }
 
 const styles = StyleSheet.create({

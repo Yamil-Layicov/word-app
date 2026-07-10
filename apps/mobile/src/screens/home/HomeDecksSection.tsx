@@ -3,37 +3,39 @@ import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import {
-  type VocabularyItem,
-  useVocabularyItemsQuery,
-} from "@/entities/vocabulary-item";
+import { type DeckSummary, useDecksQuery } from "@/entities/deck";
 import { useAuthFailureRedirect } from "@/features/auth";
+import { useCreateDeck } from "@/features/decks";
+import { isApiError } from "@/shared/api/http-error";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
-const HOME_DECK_PREVIEW_LIMIT = 20;
-
 type DeckModalMode = "actions" | "reset" | "export" | "delete" | null;
+
+const EMPTY_DECKS: DeckSummary[] = [];
 
 export function HomeDecksSection() {
   const router = useRouter();
   const [searchText, setSearchText] = useState("");
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [isCreateDeckModalVisible, setCreateDeckModalVisible] = useState(false);
   const [deckModalMode, setDeckModalMode] = useState<DeckModalMode>(null);
-  const vocabularyFilters = useMemo(() => {
-    const search = searchText.trim();
-
-    return {
-      limit: HOME_DECK_PREVIEW_LIMIT,
-      ...(search ? { search } : {}),
-      ...(favoritesOnly ? { isFavorite: true } : {}),
-    };
-  }, [favoritesOnly, searchText]);
-  const vocabularyQuery = useVocabularyItemsQuery(vocabularyFilters);
-  const hasUnauthorizedError = useAuthFailureRedirect(vocabularyQuery.error);
-  const items = vocabularyQuery.data?.items ?? [];
+  const [selectedDeck, setSelectedDeck] = useState<DeckSummary | null>(null);
+  const decksQuery = useDecksQuery();
+  const createDeckMutation = useCreateDeck();
+  const hasUnauthorizedError = useAuthFailureRedirect(
+    decksQuery.error ?? createDeckMutation.error,
+  );
+  const decks = decksQuery.data?.items ?? EMPTY_DECKS;
   const hasActiveSearch = searchText.trim().length > 0;
-  const hasActiveCriteria = hasActiveSearch || favoritesOnly;
+  const filteredDecks = useMemo(() => {
+    const search = searchText.trim().toLowerCase();
+
+    if (!search) {
+      return decks;
+    }
+
+    return decks.filter((deck) => deck.title.toLowerCase().includes(search));
+  }, [decks, searchText]);
 
   return (
     <View style={styles.section}>
@@ -59,81 +61,95 @@ export function HomeDecksSection() {
         </View>
 
         <Pressable
-          accessibilityLabel="Filter favorites"
+          accessibilityLabel="Create deck"
           accessibilityRole="button"
-          accessibilityState={{ selected: favoritesOnly }}
           style={({ pressed }) => [
-            styles.filterButton,
-            favoritesOnly ? styles.filterButtonActive : null,
+            styles.addDeckButton,
             pressed ? styles.pressed : null,
           ]}
-          onPress={() => setFavoritesOnly((value) => !value)}
+          onPress={() => setCreateDeckModalVisible(true)}
         >
-          <Ionicons
-            name={favoritesOnly ? "star" : "filter-outline"}
-            size={22}
-            color={favoritesOnly ? colors.white : colors.navy}
-          />
+          <Ionicons name="add" size={26} color={colors.white} />
         </Pressable>
       </View>
 
-      {vocabularyQuery.isLoading ? <StateCard title="Loading decks..." /> : null}
+      {decksQuery.isLoading ? <StateCard title="Loading decks..." /> : null}
 
-      {vocabularyQuery.isError && !hasUnauthorizedError ? (
+      {decksQuery.isError && !hasUnauthorizedError ? (
         <StateCard
-          title="Could not load your words."
+          title="Could not load your decks."
           actionTitle="Try again"
-          onAction={() => void vocabularyQuery.refetch()}
+          onAction={() => void decksQuery.refetch()}
         />
       ) : null}
 
-      {!vocabularyQuery.isLoading && !vocabularyQuery.isError && items.length === 0 ? (
+      {!decksQuery.isLoading && !decksQuery.isError && filteredDecks.length === 0 ? (
         <StateCard
-          title={hasActiveCriteria ? "No words match this search." : "No words added yet."}
-          actionTitle={hasActiveCriteria ? "Clear filters" : "Add word"}
+          title={hasActiveSearch ? "No decks match this search." : "No decks created yet."}
+          actionTitle={hasActiveSearch ? "Clear search" : "Create deck"}
           onAction={() => {
-            if (hasActiveCriteria) {
+            if (hasActiveSearch) {
               setSearchText("");
-              setFavoritesOnly(false);
               return;
             }
 
-            router.push("/vocabulary/create");
+            setCreateDeckModalVisible(true);
           }}
         />
       ) : null}
 
-      {items.length > 0 ? (
+      {filteredDecks.length > 0 ? (
         <View style={styles.cardList}>
-          <HomeDeckCard
-            items={items}
-            title={hasActiveCriteria ? "Filtered words" : "My Vocabulary"}
-            onPress={() => router.push("/vocabulary")}
-            onPlayPress={() => setDeckModalMode("actions")}
-          />
+          {filteredDecks.map((deck) => (
+            <HomeDeckCard
+              key={deck.id}
+              deck={deck}
+              onPress={() =>
+                router.push({
+                  pathname: "/decks/category/[deckId]",
+                  params: { deckId: deck.id },
+                })
+              }
+              onPlayPress={() => {
+                setSelectedDeck(deck);
+                setDeckModalMode("actions");
+              }}
+            />
+          ))}
         </View>
       ) : null}
 
       <DeckActionModals
         mode={deckModalMode}
-        wordCount={items.length}
+        wordCount={selectedDeck?.wordCount ?? 0}
         onClose={() => setDeckModalMode(null)}
         onModeChange={setDeckModalMode}
+      />
+      <CreateDeckModal
+        error={createDeckMutation.error}
+        loading={createDeckMutation.isPending}
+        visible={isCreateDeckModalVisible}
+        onClose={() => setCreateDeckModalVisible(false)}
+        onCreate={async (input) => {
+          const deck = await createDeckMutation.mutateAsync(input);
+          setCreateDeckModalVisible(false);
+          router.push({
+            pathname: "/decks/category/[deckId]",
+            params: { deckId: deck.id },
+          });
+        }}
       />
     </View>
   );
 }
 
 type HomeDeckCardProps = {
-  items: VocabularyItem[];
+  deck: DeckSummary;
   onPlayPress: () => void;
   onPress: () => void;
-  title: string;
 };
 
-function HomeDeckCard({ items, onPlayPress, onPress, title }: HomeDeckCardProps) {
-  const progress = getDeckProgressPercent(items);
-
+function HomeDeckCard({ deck, onPlayPress, onPress }: HomeDeckCardProps) {
   return (
     <View style={styles.card}>
       <Pressable
@@ -142,16 +158,17 @@ function HomeDeckCard({ items, onPlayPress, onPress, title }: HomeDeckCardProps)
         onPress={onPress}
       >
         <Text numberOfLines={1} style={styles.cardTitle}>
-          {title}
+          {deck.title}
         </Text>
         <Text numberOfLines={1} style={styles.cardMeta}>
-          {items.length} words
+          {deck.wordCount} {deck.wordCount === 1 ? "word" : "words"}
+          {deck.isDefault ? " - Default" : ""}
         </Text> 
         <View style={styles.progressRow}>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
+            <View style={[styles.progressFill, { width: `${deck.progressPercent}%` }]} />
           </View>
-          <Text style={styles.progressText}>{progress}%</Text>
+          <Text style={styles.progressText}>{deck.progressPercent}%</Text>
         </View>
       </Pressable>
 
@@ -173,6 +190,129 @@ type DeckActionModalsProps = {
   onModeChange: (mode: DeckModalMode) => void;
   wordCount: number;
 };
+
+type CreateDeckModalProps = {
+  error: unknown;
+  loading: boolean;
+  onClose: () => void;
+  onCreate: (input: { description?: string; isDefault?: boolean; title: string }) => Promise<void>;
+  visible: boolean;
+};
+
+function CreateDeckModal({ error, loading, onClose, onCreate, visible }: CreateDeckModalProps) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [isDefault, setIsDefault] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    const nextTitle = title.trim();
+    const nextDescription = description.trim();
+
+    if (!nextTitle) {
+      setLocalError("Deck name is required.");
+      return;
+    }
+
+    if (nextTitle.length > 80) {
+      setLocalError("Deck name must be 80 characters or fewer.");
+      return;
+    }
+
+    setLocalError(null);
+
+    await onCreate({
+      title: nextTitle,
+      ...(nextDescription ? { description: nextDescription } : {}),
+      isDefault,
+    });
+
+    setTitle("");
+    setDescription("");
+    setIsDefault(false);
+  };
+
+  const errorText = localError ?? (isApiError(error) ? error.message : null);
+
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.createDeckCard}>
+          <TextInput
+            autoCapitalize="words"
+            maxLength={80}
+            placeholder="Deck name"
+            placeholderTextColor="#9CA2B0"
+            selectionColor={colors.orange}
+            style={styles.createDeckInput}
+            value={title}
+            onChangeText={(value) => {
+              setTitle(value);
+              setLocalError(null);
+            }}
+          />
+
+          <View style={styles.createDeckUnderline} />
+
+          <TextInput
+            maxLength={240}
+            placeholder="Description"
+            placeholderTextColor="#9CA2B0"
+            selectionColor={colors.orange}
+            style={styles.createDeckDescription}
+            value={description}
+            onChangeText={setDescription}
+          />
+
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: isDefault }}
+            style={({ pressed }) => [styles.defaultCategoryRow, pressed ? styles.pressed : null]}
+            onPress={() => setIsDefault((value) => !value)}
+          >
+            <View style={[styles.defaultCheckbox, isDefault ? styles.defaultCheckboxChecked : null]}>
+              {isDefault ? <Ionicons name="checkmark" size={18} color={colors.white} /> : null}
+            </View>
+            <Text style={styles.defaultCategoryText}>Default category</Text>
+          </Pressable>
+
+          {errorText ? <Text style={styles.createDeckError}>{errorText}</Text> : null}
+
+          <View style={styles.createDeckActions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.createDeckActionButton,
+                styles.createDeckCancelButton,
+                pressed ? styles.pressed : null,
+              ]}
+              onPress={onClose}
+            >
+              <Text style={styles.createDeckCancelText}>Cancel</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.createDeckActionButton,
+                styles.createDeckSubmitButton,
+                loading ? styles.actionButtonDisabled : null,
+                pressed ? styles.pressed : null,
+              ]}
+              onPress={() => {
+                void handleCreate();
+              }}
+            >
+              <Text style={styles.createDeckSubmitText}>{loading ? "Creating..." : "Create"}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 function DeckActionModals({ mode, onClose, onModeChange, wordCount }: DeckActionModalsProps) {
   const [dontShowExportAgain, setDontShowExportAgain] = useState(false);
@@ -429,29 +569,6 @@ function StateCard({ actionTitle, onAction, title }: StateCardProps) {
   );
 }
 
-function getDeckProgressPercent(items: VocabularyItem[]) {
-  if (items.length === 0) {
-    return 0;
-  }
-
-  const maxScore = items.length * 5;
-  const currentScore = items.reduce((total, item) => total + getEstimatedMasteryStep(item), 0);
-
-  return Math.round((currentScore / maxScore) * 100);
-}
-
-function getEstimatedMasteryStep(item: VocabularyItem) {
-  if (item.userWord.status === "MASTERED") {
-    return 5;
-  }
-
-  if (item.userWord.status === "NEW") {
-    return 0;
-  }
-
-  return Math.min(4, Math.max(1, item.userWord.correctCount || item.userWord.reviewCount || 1));
-}
-
 const styles = StyleSheet.create({
   section: {
     width: "100%",
@@ -483,19 +600,15 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
     paddingVertical: spacing.md,
   },
-  filterButton: {
+  addDeckButton: {
     width: 54,
     minHeight: 54,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterButtonActive: {
     borderColor: colors.orange,
     backgroundColor: colors.orange,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardList: {
     gap: spacing.md,
@@ -591,6 +704,100 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.lg,
+  },
+  createDeckCard: {
+    width: "100%",
+    maxWidth: 330,
+    borderRadius: 22,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+  },
+  createDeckInput: {
+    color: colors.text,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: typography.weights.regular,
+    paddingVertical: spacing.sm,
+  },
+  createDeckUnderline: {
+    height: 1,
+    backgroundColor: "#A9AEB8",
+    marginBottom: spacing.md,
+  },
+  createDeckDescription: {
+    minHeight: 42,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: typography.weights.medium,
+    paddingVertical: spacing.sm,
+  },
+  defaultCategoryRow: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  defaultCheckbox: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.sm,
+    borderWidth: 2,
+    borderColor: "#969CAE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  defaultCheckboxChecked: {
+    borderColor: colors.green,
+    backgroundColor: colors.green,
+  },
+  defaultCategoryText: {
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: typography.weights.medium,
+  },
+  createDeckError: {
+    color: colors.error,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: typography.weights.bold,
+    marginTop: spacing.sm,
+  },
+  createDeckActions: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.xl,
+  },
+  createDeckActionButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createDeckCancelButton: {
+    borderWidth: 2,
+    borderColor: colors.orange,
+    backgroundColor: "transparent",
+  },
+  createDeckSubmitButton: {
+    backgroundColor: colors.orange,
+  },
+  createDeckCancelText: {
+    color: colors.orange,
+    fontSize: 17,
+    fontWeight: typography.weights.black,
+  },
+  createDeckSubmitText: {
+    color: colors.white,
+    fontSize: 17,
+    fontWeight: typography.weights.black,
+  },
+  actionButtonDisabled: {
+    opacity: 0.56,
   },
   gamePickerLayer: {
     width: "100%",

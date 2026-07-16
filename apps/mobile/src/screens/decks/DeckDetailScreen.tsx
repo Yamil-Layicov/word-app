@@ -17,7 +17,7 @@ import {
 } from "@/entities/deck";
 import type { WordType } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
-import { useAddDeckWords } from "@/features/decks";
+import { useAddDeckWords, useRemoveDeckWord } from "@/features/decks";
 import {
   REVIEW_INTERVALS,
   getReviewIntervalByApiInterval,
@@ -33,6 +33,7 @@ import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 import { VocabularyWordRow } from "@/screens/vocabulary/VocabularyWordRow";
+import { SwipeableDeckWordRow } from "./SwipeableDeckWordRow";
 
 const DEFAULT_WORD_TYPE: WordType = "OTHER";
 
@@ -42,16 +43,21 @@ export function DeckDetailScreen() {
   const deckId = getParamValue(params.deckId);
   const deckQuery = useDeckQuery(deckId);
   const addDeckWordsMutation = useAddDeckWords(deckId);
+  const removeDeckWordMutation = useRemoveDeckWord(deckId);
   const scheduleUserWordMutation = useScheduleUserWord();
   const scheduledReviewsQuery = useScheduledReviewsQuery();
   const updateVocabularyItemMutation = useUpdateVocabularyItem();
   const cancelScheduledReviewMutation = useCancelScheduledReview();
   const [isAddWordsModalVisible, setAddWordsModalVisible] = useState(false);
   const [selectedWord, setSelectedWord] = useState<DeckWord | null>(null);
+  const [wordPendingDelete, setWordPendingDelete] = useState<DeckWord | null>(
+    null,
+  );
   const [notice, setNotice] = useState<string | null>(null);
   const hasUnauthorizedError = useAuthFailureRedirect(
     deckQuery.error ??
       addDeckWordsMutation.error ??
+      removeDeckWordMutation.error ??
       scheduleUserWordMutation.error ??
       scheduledReviewsQuery.error ??
       updateVocabularyItemMutation.error ??
@@ -69,7 +75,10 @@ export function DeckDetailScreen() {
     [scheduledReviewsQuery.data?.items],
   );
 
-  const handleScheduleWord = async (word: DeckWord, interval: ReviewInterval) => {
+  const handleScheduleWord = async (
+    word: DeckWord,
+    interval: ReviewInterval,
+  ) => {
     setNotice(null);
 
     try {
@@ -81,7 +90,9 @@ export function DeckDetailScreen() {
       setNotice(`${word.sourceText} added to ${interval.label}.`);
     } catch (error) {
       if (!isApiError(error) || error.status !== 401) {
-        setNotice(isApiError(error) ? error.message : "Could not schedule this word.");
+        setNotice(
+          isApiError(error) ? error.message : "Could not schedule this word.",
+        );
       }
     }
   };
@@ -97,14 +108,18 @@ export function DeckDetailScreen() {
       });
 
       if (scheduledReview) {
-        await cancelScheduledReviewMutation.mutateAsync(scheduledReview.scheduleId);
+        await cancelScheduledReviewMutation.mutateAsync(
+          scheduledReview.scheduleId,
+        );
       }
 
       setSelectedWord(null);
       setNotice(`${word.sourceText} marked as mastered.`);
     } catch (error) {
       if (!isApiError(error) || error.status !== 401) {
-        setNotice(isApiError(error) ? error.message : "Could not update this word.");
+        setNotice(
+          isApiError(error) ? error.message : "Could not update this word.",
+        );
       }
     }
   };
@@ -114,17 +129,47 @@ export function DeckDetailScreen() {
       sourceText: draft.sourceText.trim(),
       targetText: draft.targetText.trim(),
       wordType: draft.wordType ?? DEFAULT_WORD_TYPE,
-      ...(draft.definition?.trim() ? { definition: draft.definition.trim() } : {}),
+      ...(draft.definition?.trim()
+        ? { definition: draft.definition.trim() }
+        : {}),
       ...(draft.note?.trim() ? { note: draft.note.trim() } : {}),
     }));
 
     await addDeckWordsMutation.mutateAsync({ words });
     setAddWordsModalVisible(false);
-    setNotice(`${words.length} ${words.length === 1 ? "word" : "words"} added.`);
+    setNotice(
+      `${words.length} ${words.length === 1 ? "word" : "words"} added.`,
+    );
+  };
+
+  const handleRemoveWord = async () => {
+    if (!wordPendingDelete) {
+      return;
+    }
+
+    const word = wordPendingDelete;
+    setNotice(null);
+
+    try {
+      await removeDeckWordMutation.mutateAsync(word.deckCardId);
+      setWordPendingDelete(null);
+      setNotice(`${word.sourceText} removed from this deck.`);
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(
+          isApiError(error)
+            ? error.message
+            : "Could not remove this word from the deck.",
+        );
+      }
+    }
   };
 
   return (
-    <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
+    <ScreenContainer
+      backgroundColor={colors.backgroundWarm}
+      contentStyle={styles.content}
+    >
       <View style={styles.topBar}>
         <Pressable
           accessibilityLabel="Go back"
@@ -140,14 +185,19 @@ export function DeckDetailScreen() {
             {deck?.title ?? "Deck"}
           </Text>
           <Text numberOfLines={1} style={styles.subtitle}>
-            {deck ? `${deck.wordCount} ${deck.wordCount === 1 ? "word" : "words"} - ${deck.progressPercent}%` : "Loading"}
+            {deck
+              ? `${deck.wordCount} ${deck.wordCount === 1 ? "word" : "words"} - ${deck.progressPercent}%`
+              : "Loading"}
           </Text>
         </View>
 
         <Pressable
           accessibilityLabel="Add words"
           accessibilityRole="button"
-          style={({ pressed }) => [styles.addButton, pressed ? styles.pressed : null]}
+          style={({ pressed }) => [
+            styles.addButton,
+            pressed ? styles.pressed : null,
+          ]}
           onPress={() => setAddWordsModalVisible(true)}
         >
           <Ionicons name="add" size={26} color={colors.white} />
@@ -175,19 +225,27 @@ export function DeckDetailScreen() {
       ) : null}
 
       {deck?.items.map((word) => (
-        <VocabularyWordRow
+        <SwipeableDeckWordRow
           key={word.deckCardId}
-          item={word}
-          scheduledWord={toScheduledWordPreview(scheduledByVocabularyItemId.get(word.id))}
-          showScheduledOverlay
-          onMenuPress={() => setSelectedWord(word)}
-          onPress={() =>
-            router.push({
-              pathname: "/vocabulary/[id]",
-              params: { id: word.id },
-            })
-          }
-        />
+          disabled={removeDeckWordMutation.isPending}
+          wordLabel={word.sourceText}
+          onDeleteRequest={() => setWordPendingDelete(word)}
+        >
+          <VocabularyWordRow
+            item={word}
+            scheduledWord={toScheduledWordPreview(
+              scheduledByVocabularyItemId.get(word.id),
+            )}
+            showScheduledOverlay
+            onMenuPress={() => setSelectedWord(word)}
+            onPress={() =>
+              router.push({
+                pathname: "/vocabulary/[id]",
+                params: { id: word.id },
+              })
+            }
+          />
+        </SwipeableDeckWordRow>
       ))}
 
       <DeckWordActionSheet
@@ -214,7 +272,97 @@ export function DeckDetailScreen() {
           void handleAddWords(drafts);
         }}
       />
+
+      <DeckWordDeleteDialog
+        deckTitle={deck?.title ?? "this deck"}
+        loading={removeDeckWordMutation.isPending}
+        word={wordPendingDelete}
+        onCancel={() => setWordPendingDelete(null)}
+        onConfirm={() => {
+          void handleRemoveWord();
+        }}
+      />
     </ScreenContainer>
+  );
+}
+
+type DeckWordDeleteDialogProps = {
+  deckTitle: string;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  word: DeckWord | null;
+};
+
+function DeckWordDeleteDialog({
+  deckTitle,
+  loading,
+  onCancel,
+  onConfirm,
+  word,
+}: DeckWordDeleteDialogProps) {
+  return (
+    <Modal
+      animationType="fade"
+      transparent
+      visible={Boolean(word)}
+      onRequestClose={() => {
+        if (!loading) {
+          onCancel();
+        }
+      }}
+    >
+      <Pressable
+        style={styles.deleteDialogOverlay}
+        onPress={() => {
+          if (!loading) {
+            onCancel();
+          }
+        }}
+      >
+        <Pressable style={styles.deleteDialogCard}>
+          <View style={styles.deleteDialogIcon}>
+            <Ionicons name="trash-outline" size={24} color="#C93439" />
+          </View>
+          <Text style={styles.deleteDialogTitle}>Remove word?</Text>
+          <Text style={styles.deleteDialogMessage}>
+            {word
+              ? `"${word.sourceText}" will be removed from ${deckTitle}. Your learning progress and review boxes will stay.`
+              : ""}
+          </Text>
+
+          <View style={styles.deleteDialogActions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.deleteDialogButton,
+                styles.deleteDialogCancelButton,
+                pressed ? styles.pressed : null,
+              ]}
+              onPress={onCancel}
+            >
+              <Text style={styles.deleteDialogCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.deleteDialogButton,
+                styles.deleteDialogConfirmButton,
+                loading ? styles.actionButtonDisabled : null,
+                pressed ? styles.pressed : null,
+              ]}
+              onPress={onConfirm}
+            >
+              <Text style={styles.deleteDialogConfirmText}>
+                {loading ? "Removing..." : "Remove"}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -234,7 +382,12 @@ function DeckWordActionSheet({
   word,
 }: DeckWordActionSheetProps) {
   return (
-    <Modal animationType="fade" transparent visible={Boolean(word)} onRequestClose={onClose}>
+    <Modal
+      animationType="fade"
+      transparent
+      visible={Boolean(word)}
+      onRequestClose={onClose}
+    >
       <Pressable style={styles.sheetOverlay} onPress={onClose}>
         <Pressable style={styles.actionSheet}>
           <View style={styles.sheetHandle} />
@@ -251,7 +404,11 @@ function DeckWordActionSheet({
                 <ActionButton
                   key={interval.apiInterval}
                   disabled={isUpdating}
-                  icon={interval.label.includes("hour") ? "time-outline" : "calendar-outline"}
+                  icon={
+                    interval.label.includes("hour")
+                      ? "time-outline"
+                      : "calendar-outline"
+                  }
                   label={`Review in ${interval.label}`}
                   onPress={() => onSchedule(word, interval)}
                 />
@@ -259,7 +416,11 @@ function DeckWordActionSheet({
               <ActionButton
                 disabled={isUpdating || word.userWord.status === "MASTERED"}
                 icon="checkmark-circle-outline"
-                label={word.userWord.status === "MASTERED" ? "Already mastered" : "I know this word"}
+                label={
+                  word.userWord.status === "MASTERED"
+                    ? "Already mastered"
+                    : "I know this word"
+                }
                 onPress={() => onMarkKnown(word)}
               />
             </View>
@@ -277,7 +438,12 @@ type ActionButtonProps = {
   onPress: () => void;
 };
 
-function ActionButton({ disabled = false, icon, label, onPress }: ActionButtonProps) {
+function ActionButton({
+  disabled = false,
+  icon,
+  label,
+  onPress,
+}: ActionButtonProps) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -290,8 +456,17 @@ function ActionButton({ disabled = false, icon, label, onPress }: ActionButtonPr
       ]}
       onPress={onPress}
     >
-      <Ionicons name={icon} size={20} color={disabled ? colors.textMuted : colors.navy} />
-      <Text style={[styles.actionButtonText, disabled ? styles.actionButtonTextDisabled : null]}>
+      <Ionicons
+        name={icon}
+        size={20}
+        color={disabled ? colors.textMuted : colors.navy}
+      />
+      <Text
+        style={[
+          styles.actionButtonText,
+          disabled ? styles.actionButtonTextDisabled : null,
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -305,8 +480,15 @@ type AddWordsModalProps = {
   visible: boolean;
 };
 
-function AddWordsModal({ loading, onClose, onSubmit, visible }: AddWordsModalProps) {
-  const [drafts, setDrafts] = useState<DeckWordDraft[]>(() => [createWordDraft()]);
+function AddWordsModal({
+  loading,
+  onClose,
+  onSubmit,
+  visible,
+}: AddWordsModalProps) {
+  const [drafts, setDrafts] = useState<DeckWordDraft[]>(() => [
+    createWordDraft(),
+  ]);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = () => {
@@ -339,15 +521,30 @@ function AddWordsModal({ loading, onClose, onSubmit, visible }: AddWordsModalPro
 
   return (
     <Modal animationType="slide" visible={visible} onRequestClose={onClose}>
-      <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.modalContent}>
+      <ScreenContainer
+        backgroundColor={colors.backgroundWarm}
+        contentStyle={styles.modalContent}
+      >
         <View style={styles.wordModalTopBar}>
-          <Pressable accessibilityRole="button" style={styles.iconButton} onPress={onClose}>
+          <Pressable
+            accessibilityRole="button"
+            style={styles.iconButton}
+            onPress={onClose}
+          >
             <Ionicons name="chevron-back" size={27} color={colors.textMuted} />
           </Pressable>
           <Text style={styles.wordModalTitle}>New words</Text>
           <View style={styles.wordModalTools}>
-            <Ionicons name="options-outline" size={25} color={colors.textMuted} />
-            <Ionicons name="help-circle-outline" size={25} color={colors.textMuted} />
+            <Ionicons
+              name="options-outline"
+              size={25}
+              color={colors.textMuted}
+            />
+            <Ionicons
+              name="help-circle-outline"
+              size={25}
+              color={colors.textMuted}
+            />
           </View>
         </View>
 
@@ -365,7 +562,9 @@ function AddWordsModal({ loading, onClose, onSubmit, visible }: AddWordsModalPro
               style={styles.wordDraftInput}
               value={draft.sourceText}
               onChangeText={(value) => {
-                setDrafts((current) => updateDraft(current, draft.id, { sourceText: value }));
+                setDrafts((current) =>
+                  updateDraft(current, draft.id, { sourceText: value }),
+                );
                 setError(null);
               }}
             />
@@ -379,7 +578,9 @@ function AddWordsModal({ loading, onClose, onSubmit, visible }: AddWordsModalPro
               style={styles.wordDraftInput}
               value={draft.targetText}
               onChangeText={(value) => {
-                setDrafts((current) => updateDraft(current, draft.id, { targetText: value }));
+                setDrafts((current) =>
+                  updateDraft(current, draft.id, { targetText: value }),
+                );
                 setError(null);
               }}
             />
@@ -391,7 +592,14 @@ function AddWordsModal({ loading, onClose, onSubmit, visible }: AddWordsModalPro
                 <Text style={styles.wordDraftChipText}>Example</Text>
               </View>
               <View style={[styles.wordDraftChip, styles.wordDraftChipOrange]}>
-                <Text style={[styles.wordDraftChipText, styles.wordDraftChipTextOrange]}>Image</Text>
+                <Text
+                  style={[
+                    styles.wordDraftChipText,
+                    styles.wordDraftChipTextOrange,
+                  ]}
+                >
+                  Image
+                </Text>
               </View>
             </View>
           </View>
@@ -402,8 +610,13 @@ function AddWordsModal({ loading, onClose, onSubmit, visible }: AddWordsModalPro
         <Pressable
           accessibilityLabel="Add another word row"
           accessibilityRole="button"
-          style={({ pressed }) => [styles.modalPlusButton, pressed ? styles.pressed : null]}
-          onPress={() => setDrafts((current) => [...current, createWordDraft()])}
+          style={({ pressed }) => [
+            styles.modalPlusButton,
+            pressed ? styles.pressed : null,
+          ]}
+          onPress={() =>
+            setDrafts((current) => [...current, createWordDraft()])
+          }
         >
           <Ionicons name="add" size={38} color={colors.white} />
         </Pressable>
@@ -451,10 +664,14 @@ function updateDraft(
   id: string,
   patch: Partial<DeckWordDraft>,
 ): DeckWordDraft[] {
-  return drafts.map((draft) => (draft.id === id ? { ...draft, ...patch } : draft));
+  return drafts.map((draft) =>
+    draft.id === id ? { ...draft, ...patch } : draft,
+  );
 }
 
-function toScheduledWordPreview(scheduledReview: ScheduledReviewItem | undefined) {
+function toScheduledWordPreview(
+  scheduledReview: ScheduledReviewItem | undefined,
+) {
   if (!scheduledReview) {
     return undefined;
   }
@@ -547,6 +764,75 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: typography.weights.bold,
     textAlign: "center",
+  },
+  deleteDialogOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(8, 18, 28, 0.48)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+  },
+  deleteDialogCard: {
+    width: "100%",
+    maxWidth: 330,
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    padding: spacing.xl,
+  },
+  deleteDialogIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.pill,
+    backgroundColor: "#FFF1F1",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+  },
+  deleteDialogTitle: {
+    color: colors.navy,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: typography.weights.black,
+    textAlign: "center",
+    marginTop: spacing.md,
+  },
+  deleteDialogMessage: {
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: typography.weights.medium,
+    textAlign: "center",
+    marginTop: spacing.sm,
+  },
+  deleteDialogActions: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.xl,
+  },
+  deleteDialogButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteDialogCancelButton: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.white,
+  },
+  deleteDialogConfirmButton: {
+    backgroundColor: "#C93439",
+  },
+  deleteDialogCancelText: {
+    color: colors.navy,
+    fontSize: 14,
+    fontWeight: typography.weights.black,
+  },
+  deleteDialogConfirmText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: typography.weights.black,
   },
   sheetOverlay: {
     flex: 1,

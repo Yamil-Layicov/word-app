@@ -4,6 +4,7 @@ import {
   addDeckWords,
   createDeck,
   deckQueryKeys,
+  removeDeckWord,
   type AddDeckWordsRequest,
   type CreateDeckRequest,
 } from "@/entities/deck";
@@ -27,8 +28,24 @@ export function useAddDeckWords(deckId: string) {
     onSuccess: (deck) => {
       queryClient.setQueryData(deckQueryKeys.detail(deck.id), deck);
       void queryClient.invalidateQueries({ queryKey: deckQueryKeys.lists() });
-      void queryClient.invalidateQueries({ queryKey: vocabularyItemQueryKeys.lists() });
-      void queryClient.invalidateQueries({ queryKey: scheduledReviewQueryKeys.all });
+      void queryClient.invalidateQueries({
+        queryKey: vocabularyItemQueryKeys.lists(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: scheduledReviewQueryKeys.all,
+      });
+    },
+  });
+}
+
+export function useRemoveDeckWord(deckId: string) {
+  return useMutation({
+    mutationFn: (deckCardId: string) => removeDeckWord(deckId, deckCardId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: deckQueryKeys.detail(deckId),
+      });
+      void queryClient.invalidateQueries({ queryKey: deckQueryKeys.lists() });
     },
   });
 }

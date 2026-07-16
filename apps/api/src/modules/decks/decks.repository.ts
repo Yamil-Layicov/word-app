@@ -41,6 +41,10 @@ type AddDeckWordsInput = FindDeckInput & {
   words: AddDeckWordInput[];
 };
 
+type RemoveDeckCardInput = FindDeckInput & {
+  deckCardId: string;
+};
+
 const deckVocabularyExampleSelect = {
   id: true,
   sourceSentence: true,
@@ -321,6 +325,21 @@ export class DecksRepository {
 
       return updatedDeck ? this.toDeckResult(updatedDeck) : null;
     });
+  }
+
+  async removeDeckCard(input: RemoveDeckCardInput): Promise<boolean> {
+    const result = await this.prisma.deckCard.deleteMany({
+      where: {
+        id: input.deckCardId,
+        deckId: input.deckId,
+        deck: {
+          userId: input.userId,
+          languagePairId: input.languagePairId,
+        },
+      },
+    });
+
+    return result.count > 0;
   }
 
   private toDeckResult(deck: DeckRecord): DeckResult {

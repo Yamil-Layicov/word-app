@@ -21,3 +21,7 @@ export function createDeck(input: CreateDeckRequest) {
 export function addDeckWords(deckId: string, input: AddDeckWordsRequest) {
   return authClient.post<DeckDetail>(`/decks/${deckId}/words`, input);
 }
+
+export function removeDeckWord(deckId: string, deckCardId: string) {
+  return authClient.delete<void>(`/decks/${deckId}/words/${deckCardId}`);
+}

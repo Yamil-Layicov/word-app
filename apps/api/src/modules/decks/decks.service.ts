@@ -124,6 +124,26 @@ export class DecksService {
     return toDeckDetailResponse(deck);
   }
 
+  async removeWordFromDeck(
+    currentUser: AuthenticatedUser,
+    deckId: string,
+    deckCardId: string,
+  ): Promise<void> {
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+    const removed = await this.decksRepository.removeDeckCard({
+      userId: currentUser.id,
+      languagePairId: activeLanguagePairId,
+      deckId,
+      deckCardId,
+    });
+
+    if (!removed) {
+      throw new NotFoundException('Deck word not found');
+    }
+  }
+
   private async getActiveLanguagePairId(userId: string): Promise<string> {
     const userContext = await this.decksRepository.findUserContext(userId);
 

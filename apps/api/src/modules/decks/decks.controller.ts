@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
@@ -39,5 +49,19 @@ export class DecksController {
     @Body() dto: AddDeckWordsDto,
   ) {
     return this.decksService.addWordsToDeck(currentUser, deckId, dto);
+  }
+
+  @Delete(':id/words/:deckCardId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeWordFromDeck(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') deckId: string,
+    @Param('deckCardId') deckCardId: string,
+  ) {
+    return this.decksService.removeWordFromDeck(
+      currentUser,
+      deckId,
+      deckCardId,
+    );
   }
 }

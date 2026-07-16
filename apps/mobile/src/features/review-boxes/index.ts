@@ -17,6 +17,7 @@ export {
   REVIEW_INTERVALS,
   getReviewIntervalByApiInterval,
   getReviewIntervalByLabel,
+  isScheduledReviewItemDue,
 } from "./model";
 export { scheduledReviewQueryKeys } from "./query-keys";
 export {
@@ -29,6 +30,7 @@ export type {
   AnswerScheduledReviewResponse,
   ReviewInterval,
   ReviewIntervalLabel,
+  ReviewSessionMode,
   ScheduleUserWordRequest,
   ScheduledReviewAnswerResult,
   ScheduledReviewBox,

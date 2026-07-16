@@ -173,6 +173,7 @@ export class ScheduledReviewsService {
       scheduleId,
       answeredAt,
       answerResult: dto.result,
+      practiceMode: dto.practiceMode,
       isCorrect: nextState.isCorrect,
       nextStatus: nextState.nextStatus,
       nextMasteryStep: nextState.nextMasteryStep,

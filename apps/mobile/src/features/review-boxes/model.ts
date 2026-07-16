@@ -3,6 +3,7 @@ import type {
   UserWordStatus,
   WordType,
 } from "@/entities/vocabulary-item";
+import type { PracticeMode } from "@/entities/practice";
 
 export type ScheduledReviewInterval =
   | "ONE_HOUR"
@@ -19,6 +20,7 @@ export type ScheduledReviewState =
   | "CANCELLED";
 
 export type ScheduledReviewAnswerResult = "INCORRECT" | "CORRECT" | "KNOWN";
+export type ReviewSessionMode = Exclude<PracticeMode, "OTHER">;
 
 export type ReviewIntervalLabel =
   | "1 hour"
@@ -93,11 +95,13 @@ export type ScheduleUserWordRequest = {
 
 export type AnswerScheduledReviewRequest =
   | {
+      practiceMode: PracticeMode;
       scheduleId: string;
       result: "KNOWN";
       nextInterval?: never;
     }
   | {
+      practiceMode: PracticeMode;
       scheduleId: string;
       result: Exclude<ScheduledReviewAnswerResult, "KNOWN">;
       nextInterval: ScheduledReviewInterval;
@@ -163,4 +167,16 @@ export function getReviewIntervalByApiInterval(
 
 export function getReviewIntervalByLabel(label: ReviewIntervalLabel) {
   return REVIEW_INTERVALS.find((item) => item.label === label);
+}
+
+export function isScheduledReviewItemDue(
+  item: ScheduledReviewItem,
+  nowMs: number,
+) {
+  return (
+    item.state === "DUE" ||
+    (item.state === "STARTED" &&
+      item.dueAt !== null &&
+      Date.parse(item.dueAt) <= nowMs)
+  );
 }

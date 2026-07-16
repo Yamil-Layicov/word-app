@@ -11,7 +11,7 @@ import { useAuthFailureRedirect } from "@/features/auth";
 import {
   REVIEW_INTERVALS,
   getReviewIntervalByApiInterval,
-  useAnswerScheduledReview,
+  isScheduledReviewItemDue,
   useCancelScheduledReview,
   useScheduleUserWord,
   useScheduledReviewBoxDetailQuery,
@@ -24,10 +24,7 @@ import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 import { VocabularyWordRow } from "@/screens/vocabulary/VocabularyWordRow";
-import {
-  ScheduledReviewPrompt,
-  type ScheduledReviewCompletion,
-} from "./ScheduledReviewPrompt";
+import { ReviewModePicker } from "./ReviewModePicker";
 import { ScheduledWordActionSheet } from "./ScheduledWordActionSheet";
 
 const EMPTY_SCHEDULED_ITEMS: ScheduledReviewItem[] = [];
@@ -42,18 +39,18 @@ export function ReviewBoxDetailScreen() {
     useState<ScheduledReviewItem | null>(null);
   const [selectedMasteredItem, setSelectedMasteredItem] =
     useState<VocabularyItem | null>(null);
+  const [isReviewModePickerVisible, setReviewModePickerVisible] =
+    useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const boxDetailQuery = useScheduledReviewBoxDetailQuery(intervalId);
   const vocabularyQuery = useVocabularyItemsQuery({ limit: 100 });
-  const answerMutation = useAnswerScheduledReview();
   const cancelMutation = useCancelScheduledReview();
   const scheduleMutation = useScheduleUserWord();
   const startMutation = useStartScheduledReviewBox();
   const hasUnauthorizedError = useAuthFailureRedirect(
     vocabularyQuery.error ??
       boxDetailQuery.error ??
-      answerMutation.error ??
       cancelMutation.error ??
       scheduleMutation.error ??
       startMutation.error,
@@ -76,7 +73,6 @@ export function ReviewBoxDetailScreen() {
     ? masteredItems.length
     : scheduledItems.length;
   const isUpdating =
-    answerMutation.isPending ||
     cancelMutation.isPending ||
     scheduleMutation.isPending ||
     startMutation.isPending;
@@ -86,27 +82,6 @@ export function ReviewBoxDetailScreen() {
 
     return () => clearInterval(timerId);
   }, []);
-
-  const completeReview = async (
-    item: ScheduledReviewItem,
-    completion: ScheduledReviewCompletion,
-  ) => {
-    setNotice(null);
-
-    try {
-      await answerMutation.mutateAsync({
-        scheduleId: item.scheduleId,
-        ...completion,
-      });
-      setNotice(`${item.sourceText} review saved.`);
-    } catch (error) {
-      if (!isApiError(error) || error.status !== 401) {
-        setNotice(
-          isApiError(error) ? error.message : "Could not save this review.",
-        );
-      }
-    }
-  };
 
   const moveScheduledWord = async (nextInterval: ScheduledReviewInterval) => {
     if (!selectedScheduledItem) {
@@ -218,7 +193,19 @@ export function ReviewBoxDetailScreen() {
           </Text>
         </View>
 
-        {interval && groupedItems.queued.length > 0 ? (
+        {interval && groupedItems.due.length > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.startButton,
+              pressed ? styles.pressed : null,
+            ]}
+            onPress={() => setReviewModePickerVisible(true)}
+          >
+            <Ionicons name="play" size={15} color={colors.white} />
+            <Text style={styles.startButtonText}>Play</Text>
+          </Pressable>
+        ) : interval && groupedItems.queued.length > 0 ? (
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: startMutation.isPending }}
@@ -284,21 +271,13 @@ export function ReviewBoxDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ready to review</Text>
           {groupedItems.due.map((item) => (
-            <View key={item.scheduleId} style={styles.reviewItem}>
-              <ScheduledReviewPrompt
-                disabled={answerMutation.isPending}
-                item={item}
-                onComplete={(completion) => {
-                  void completeReview(item, completion);
-                }}
-                onOpenWord={() =>
-                  router.push({
-                    pathname: "/vocabulary/[id]",
-                    params: { id: item.vocabularyItemId },
-                  })
-                }
-              />
-            </View>
+            <VocabularyWordRow
+              key={item.scheduleId}
+              concealTranslation
+              item={toVocabularyItem(item)}
+              onMenuPress={() => setSelectedScheduledItem(item)}
+              onPress={() => setSelectedScheduledItem(item)}
+            />
           ))}
         </View>
       ) : null}
@@ -319,6 +298,29 @@ export function ReviewBoxDetailScreen() {
           ))}
         </View>
       ) : null}
+
+      <ReviewModePicker
+        canUseMultipleChoice={
+          new Set(groupedItems.due.map((item) => item.targetText)).size >= 2
+        }
+        dueWordCount={groupedItems.due.length}
+        visible={isReviewModePickerVisible}
+        onClose={() => setReviewModePickerVisible(false)}
+        onSelect={(mode) => {
+          if (!interval) {
+            return;
+          }
+
+          setReviewModePickerVisible(false);
+          router.push({
+            pathname: "/decks/[boxId]/review",
+            params: {
+              boxId: interval.apiInterval,
+              mode,
+            },
+          });
+        }}
+      />
 
       <ScheduledWordActionSheet
         currentInterval={selectedScheduledItem?.interval}
@@ -391,10 +393,7 @@ function getScheduledReviewItemStatus(
     return "queued";
   }
 
-  if (
-    item.state === "DUE" ||
-    (item.dueAt !== null && Date.parse(item.dueAt) <= nowMs)
-  ) {
+  if (isScheduledReviewItemDue(item, nowMs)) {
     return "due";
   }
 
@@ -524,10 +523,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.black,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
-  },
-  reviewItem: {
-    borderTopWidth: 1,
-    borderTopColor: "#F0E8DE",
   },
   stateBox: {
     borderRadius: radii.lg,

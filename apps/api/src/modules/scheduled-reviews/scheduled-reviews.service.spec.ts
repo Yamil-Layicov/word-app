@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 
 import {
+  PracticeMode,
   ScheduledReviewAnswerResult,
   ScheduledReviewInterval,
   ScheduledReviewState,
@@ -143,6 +144,7 @@ describe('ScheduledReviewsService', () => {
 
   it('stores a correct result and queues the explicitly selected next box', async () => {
     const response = await service.answerSchedule(currentUser, 'schedule-1', {
+      practiceMode: PracticeMode.FLASHCARD,
       result: ScheduledReviewAnswerResult.CORRECT,
       nextInterval: ScheduledReviewInterval.ONE_WEEK,
     });
@@ -150,6 +152,7 @@ describe('ScheduledReviewsService', () => {
     expect(answerDueScheduleMock).toHaveBeenCalledWith(
       expect.objectContaining({
         answerResult: ScheduledReviewAnswerResult.CORRECT,
+        practiceMode: PracticeMode.FLASHCARD,
         isCorrect: true,
         nextMasteryStep: 3,
         nextStatus: UserWordStatus.REVIEWING,
@@ -168,6 +171,7 @@ describe('ScheduledReviewsService', () => {
 
   it('decreases mastery for an incorrect result and uses the selected box', async () => {
     await service.answerSchedule(currentUser, 'schedule-1', {
+      practiceMode: PracticeMode.TYPING,
       result: ScheduledReviewAnswerResult.INCORRECT,
       nextInterval: ScheduledReviewInterval.SIX_HOURS,
     });
@@ -175,6 +179,7 @@ describe('ScheduledReviewsService', () => {
     expect(answerDueScheduleMock).toHaveBeenCalledWith(
       expect.objectContaining({
         answerResult: ScheduledReviewAnswerResult.INCORRECT,
+        practiceMode: PracticeMode.TYPING,
         isCorrect: false,
         nextMasteryStep: 1,
         nextStatus: UserWordStatus.LEARNING,
@@ -187,12 +192,14 @@ describe('ScheduledReviewsService', () => {
 
   it('marks a known word as mastered without creating another schedule', async () => {
     await service.answerSchedule(currentUser, 'schedule-1', {
+      practiceMode: PracticeMode.MULTIPLE_CHOICE,
       result: ScheduledReviewAnswerResult.KNOWN,
     });
 
     expect(answerDueScheduleMock).toHaveBeenCalledWith(
       expect.objectContaining({
         answerResult: ScheduledReviewAnswerResult.KNOWN,
+        practiceMode: PracticeMode.MULTIPLE_CHOICE,
         isCorrect: true,
         nextMasteryStep: 5,
         nextStatus: UserWordStatus.MASTERED,
@@ -204,6 +211,7 @@ describe('ScheduledReviewsService', () => {
   it('requires a next interval when the word is not marked as known', async () => {
     await expect(
       service.answerSchedule(currentUser, 'schedule-1', {
+        practiceMode: PracticeMode.FLASHCARD,
         result: ScheduledReviewAnswerResult.CORRECT,
       }),
     ).rejects.toThrow('Next review interval is required');
@@ -214,6 +222,7 @@ describe('ScheduledReviewsService', () => {
   it('rejects a next interval when the word is marked as known', async () => {
     await expect(
       service.answerSchedule(currentUser, 'schedule-1', {
+        practiceMode: PracticeMode.FLASHCARD,
         result: ScheduledReviewAnswerResult.KNOWN,
         nextInterval: ScheduledReviewInterval.ONE_DAY,
       }),

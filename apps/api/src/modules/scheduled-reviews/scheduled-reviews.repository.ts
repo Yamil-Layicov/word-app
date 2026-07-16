@@ -4,6 +4,7 @@ import {
   ScheduledReviewInterval,
   ScheduledReviewState,
   UserWordStatus,
+  type PracticeMode as PracticeModeType,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type {
@@ -49,6 +50,7 @@ type AnswerDueScheduleInput = {
   scheduleId: string;
   answeredAt: Date;
   answerResult: ScheduledReviewAnswerResult;
+  practiceMode: PracticeModeType;
   isCorrect: boolean;
   nextStatus: UserWordStatus;
   nextMasteryStep: number;
@@ -424,6 +426,17 @@ export class ScheduledReviewsRepository {
           lastReviewedAt: input.answeredAt,
         },
         select: scheduledReviewUserWordSelect,
+      });
+
+      await tx.practiceLog.create({
+        data: {
+          userId: input.userId,
+          userWordId: schedule.userWordId,
+          vocabularyItemId: schedule.userWord.vocabularyItem.id,
+          practiceMode: input.practiceMode,
+          isCorrect: input.isCorrect,
+          answeredAt: input.answeredAt,
+        },
       });
 
       const nextSchedule = input.nextSchedule

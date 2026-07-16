@@ -9,6 +9,7 @@ type ScheduledWordPreview = {
 };
 
 type VocabularyWordRowProps = {
+  concealTranslation?: boolean;
   item: VocabularyItem;
   scheduledWord?: ScheduledWordPreview;
   showScheduledOverlay?: boolean;
@@ -17,6 +18,7 @@ type VocabularyWordRowProps = {
 };
 
 export function VocabularyWordRow({
+  concealTranslation = false,
   item,
   scheduledWord,
   showScheduledOverlay = false,
@@ -30,53 +32,107 @@ export function VocabularyWordRow({
 
   return (
     <View style={[styles.row, isScheduled ? styles.rowScheduled : null]}>
-      <View style={styles.repeatColumn} accessibilityLabel={`${repeatCount} reviews completed`}>
+      <View
+        style={styles.repeatColumn}
+        accessibilityLabel={`${repeatCount} reviews completed`}
+      >
         <Text style={styles.repeatCount}>{repeatCount}</Text>
         <View style={styles.masteryTrack}>
-          <View style={[styles.masteryFill, { height: `${masteryPercent}%` }]} />
+          <View
+            style={[styles.masteryFill, { height: `${masteryPercent}%` }]}
+          />
         </View>
       </View>
 
       <Pressable
         accessibilityRole="button"
-        style={({ pressed }) => [styles.rowContent, pressed ? styles.pressed : null]}
+        style={({ pressed }) => [
+          styles.rowContent,
+          pressed ? styles.pressed : null,
+        ]}
         onPress={onPress}
       >
-        <View style={[styles.wordColumns, isScheduled ? styles.wordColumnsScheduled : null]}>
+        <View
+          style={[
+            styles.wordColumns,
+            isScheduled ? styles.wordColumnsScheduled : null,
+          ]}
+        >
           <View style={styles.wordColumn}>
             <View style={styles.wordLine}>
               <Text
                 numberOfLines={1}
-                style={[styles.sourceText, isScheduled ? styles.scheduledWordText : null]}
+                style={[
+                  styles.sourceText,
+                  isScheduled ? styles.scheduledWordText : null,
+                ]}
               >
                 {item.sourceText}
               </Text>
-              {item.userWord.isFavorite ? <Ionicons name="star" size={14} color={colors.orange} /> : null}
+              {item.userWord.isFavorite ? (
+                <Ionicons name="star" size={14} color={colors.orange} />
+              ) : null}
             </View>
           </View>
 
-          <Pressable accessibilityLabel={`Play ${item.sourceText}`} accessibilityRole="button" hitSlop={8}>
-            <Ionicons name="volume-medium-outline" size={25} color={colors.textMuted} />
+          <Pressable
+            accessibilityLabel={`Play ${item.sourceText}`}
+            accessibilityRole="button"
+            hitSlop={8}
+          >
+            <Ionicons
+              name="volume-medium-outline"
+              size={25}
+              color={colors.textMuted}
+            />
           </Pressable>
 
           <View style={styles.translationColumn}>
-            <Text
-              numberOfLines={1}
-              style={[styles.targetText, isScheduled ? styles.scheduledWordText : null]}
-            >
-              {item.targetText}
-            </Text>
+            {concealTranslation ? (
+              <View style={styles.concealedTranslation}>
+                <Ionicons
+                  name="eye-off-outline"
+                  size={15}
+                  color={colors.textMuted}
+                />
+                <Text style={styles.concealedTranslationText}>Hidden</Text>
+              </View>
+            ) : (
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.targetText,
+                  isScheduled ? styles.scheduledWordText : null,
+                ]}
+              >
+                {item.targetText}
+              </Text>
+            )}
           </View>
 
-          <Pressable accessibilityLabel={`Play ${item.targetText}`} accessibilityRole="button" hitSlop={8}>
-            <Ionicons name="volume-medium-outline" size={25} color={colors.textMuted} />
-          </Pressable>
+          {!concealTranslation ? (
+            <Pressable
+              accessibilityLabel={`Play ${item.targetText}`}
+              accessibilityRole="button"
+              hitSlop={8}
+            >
+              <Ionicons
+                name="volume-medium-outline"
+                size={25}
+                color={colors.textMuted}
+              />
+            </Pressable>
+          ) : null}
         </View>
 
         {isScheduled && scheduledWord ? (
           <View pointerEvents="none" style={styles.scheduledOverlay}>
             <View style={styles.scheduledOverlayBadge}>
-              <Ionicons name="lock-closed-outline" size={13} color={colors.green} />
+              <Ionicons
+                name="lock-closed-outline"
+                size={13}
+                color={colors.green}
+              />
               <Text style={styles.scheduledOverlayText}>
                 In {scheduledWord.intervalLabel} box
               </Text>
@@ -90,10 +146,17 @@ export function VocabularyWordRow({
           accessibilityLabel={`Open actions for ${item.sourceText}`}
           accessibilityRole="button"
           hitSlop={10}
-          style={({ pressed }) => [styles.menuButton, pressed ? styles.pressed : null]}
+          style={({ pressed }) => [
+            styles.menuButton,
+            pressed ? styles.pressed : null,
+          ]}
           onPress={onMenuPress}
         >
-          <Ionicons name="ellipsis-vertical" size={20} color={colors.textMuted} />
+          <Ionicons
+            name="ellipsis-vertical"
+            size={20}
+            color={colors.textMuted}
+          />
         </Pressable>
       ) : null}
     </View>
@@ -113,7 +176,10 @@ export function getEstimatedMasteryStep(item: VocabularyItem) {
     return 0;
   }
 
-  return Math.min(4, Math.max(1, item.userWord.correctCount || item.userWord.reviewCount || 1));
+  return Math.min(
+    4,
+    Math.max(1, item.userWord.correctCount || item.userWord.reviewCount || 1),
+  );
 }
 
 const styles = StyleSheet.create({
@@ -195,6 +261,23 @@ const styles = StyleSheet.create({
     fontSize: 21,
     lineHeight: 27,
     fontWeight: typography.weights.regular,
+  },
+  concealedTranslation: {
+    minHeight: 34,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundSoft,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  concealedTranslationText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: typography.weights.bold,
   },
   scheduledWordText: {
     color: colors.textMuted,

@@ -187,6 +187,7 @@ export function toScheduledReviewAnswerResponse(
 ): ScheduledReviewAnswerResponse {
   return {
     completedScheduleId: result.completedScheduleId,
+    result: result.result,
     nextSchedule: result.nextSchedule
       ? toScheduledReviewItemResponse(result.nextSchedule, now)
       : null,

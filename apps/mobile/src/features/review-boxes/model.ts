@@ -1,4 +1,8 @@
-import type { CefrLevel, UserWordStatus, WordType } from "@/entities/vocabulary-item";
+import type {
+  CefrLevel,
+  UserWordStatus,
+  WordType,
+} from "@/entities/vocabulary-item";
 
 export type ScheduledReviewInterval =
   | "ONE_HOUR"
@@ -7,11 +11,21 @@ export type ScheduledReviewInterval =
   | "THREE_DAYS"
   | "ONE_WEEK";
 
-export type ScheduledReviewState = "QUEUED" | "STARTED" | "DUE" | "COMPLETED" | "CANCELLED";
+export type ScheduledReviewState =
+  | "QUEUED"
+  | "STARTED"
+  | "DUE"
+  | "COMPLETED"
+  | "CANCELLED";
 
-export type ScheduledReviewAnswerQuality = "AGAIN" | "HARD" | "GOOD" | "EASY" | "KNOWN";
+export type ScheduledReviewAnswerResult = "INCORRECT" | "CORRECT" | "KNOWN";
 
-export type ReviewIntervalLabel = "1 hour" | "6 hours" | "1 day" | "3 days" | "1 week";
+export type ReviewIntervalLabel =
+  | "1 hour"
+  | "6 hours"
+  | "1 day"
+  | "3 days"
+  | "1 week";
 
 export type ReviewInterval = {
   apiInterval: ScheduledReviewInterval;
@@ -77,13 +91,21 @@ export type ScheduleUserWordRequest = {
   interval: ScheduledReviewInterval;
 };
 
-export type AnswerScheduledReviewRequest = {
-  scheduleId: string;
-  quality: ScheduledReviewAnswerQuality;
-};
+export type AnswerScheduledReviewRequest =
+  | {
+      scheduleId: string;
+      result: "KNOWN";
+      nextInterval?: never;
+    }
+  | {
+      scheduleId: string;
+      result: Exclude<ScheduledReviewAnswerResult, "KNOWN">;
+      nextInterval: ScheduledReviewInterval;
+    };
 
 export type AnswerScheduledReviewResponse = {
   completedScheduleId: string;
+  result: ScheduledReviewAnswerResult;
   nextSchedule: ScheduledReviewItem | null;
   userWord: {
     id: string;
@@ -133,7 +155,9 @@ export const REVIEW_INTERVALS: ReviewInterval[] = [
   },
 ];
 
-export function getReviewIntervalByApiInterval(interval: ScheduledReviewInterval) {
+export function getReviewIntervalByApiInterval(
+  interval: ScheduledReviewInterval,
+) {
   return REVIEW_INTERVALS.find((item) => item.apiInterval === interval);
 }
 

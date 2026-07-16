@@ -1,14 +1,14 @@
-import { IsEnum } from 'class-validator';
-
-export enum ScheduledReviewAnswerQuality {
-  AGAIN = 'AGAIN',
-  HARD = 'HARD',
-  GOOD = 'GOOD',
-  EASY = 'EASY',
-  KNOWN = 'KNOWN',
-}
+import {
+  ScheduledReviewAnswerResult,
+  ScheduledReviewInterval,
+} from '@prisma/client';
+import { IsEnum, IsOptional } from 'class-validator';
 
 export class AnswerScheduledReviewDto {
-  @IsEnum(ScheduledReviewAnswerQuality)
-  quality!: ScheduledReviewAnswerQuality;
+  @IsEnum(ScheduledReviewAnswerResult)
+  result!: ScheduledReviewAnswerResult;
+
+  @IsOptional()
+  @IsEnum(ScheduledReviewInterval)
+  nextInterval?: ScheduledReviewInterval;
 }

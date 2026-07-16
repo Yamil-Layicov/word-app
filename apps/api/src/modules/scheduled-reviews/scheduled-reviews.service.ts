@@ -6,16 +6,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import {
+  ScheduledReviewAnswerResult,
   ScheduledReviewInterval,
   UserStatus,
   UserWordStatus,
 } from '@prisma/client';
 import { ClockService } from '../../common/time/clock.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
-import {
-  AnswerScheduledReviewDto,
-  ScheduledReviewAnswerQuality,
-} from './dto/answer-scheduled-review.dto';
+import { AnswerScheduledReviewDto } from './dto/answer-scheduled-review.dto';
 import { GetScheduledReviewBoxParamDto } from './dto/get-scheduled-review-box-param.dto';
 import { ScheduleUserWordDto } from './dto/schedule-user-word.dto';
 import {
@@ -35,7 +33,6 @@ import type {
 } from './scheduled-reviews.types';
 
 const MAX_MASTERY_STEP = 5;
-const MASTERED_HOLD_DAYS = 365;
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 
@@ -165,9 +162,9 @@ export class ScheduledReviewsService {
     }
 
     const nextState = this.calculateNextState({
-      quality: dto.quality,
+      result: dto.result,
       currentMasteryStep: target.userWord.masteryStep,
-      answeredAt,
+      nextInterval: dto.nextInterval,
     });
 
     const result = await this.scheduledReviewsRepository.answerDueSchedule({
@@ -175,11 +172,10 @@ export class ScheduledReviewsService {
       languagePairId: activeLanguagePairId,
       scheduleId,
       answeredAt,
+      answerResult: dto.result,
       isCorrect: nextState.isCorrect,
       nextStatus: nextState.nextStatus,
       nextMasteryStep: nextState.nextMasteryStep,
-      nextIntervalDays: nextState.nextIntervalDays,
-      nextReviewAt: nextState.nextReviewAt,
       nextSchedule: nextState.nextSchedule,
     });
 
@@ -210,112 +206,56 @@ export class ScheduledReviewsService {
   }
 
   private calculateNextState(input: {
-    quality: ScheduledReviewAnswerQuality;
+    result: ScheduledReviewAnswerResult;
     currentMasteryStep: number;
-    answeredAt: Date;
+    nextInterval?: ScheduledReviewInterval;
   }): {
     isCorrect: boolean;
     nextStatus: UserWordStatus;
     nextMasteryStep: number;
-    nextIntervalDays: number;
-    nextReviewAt: Date;
     nextSchedule: {
       interval: ScheduledReviewInterval;
-      dueAt: Date;
     } | null;
   } {
-    if (input.quality === ScheduledReviewAnswerQuality.KNOWN) {
+    if (input.result === ScheduledReviewAnswerResult.KNOWN) {
+      if (input.nextInterval) {
+        throw new BadRequestException(
+          'Known words cannot have a next review interval',
+        );
+      }
+
       return {
         isCorrect: true,
         nextStatus: UserWordStatus.MASTERED,
         nextMasteryStep: MAX_MASTERY_STEP,
-        nextIntervalDays: MASTERED_HOLD_DAYS,
-        nextReviewAt: this.addDays(input.answeredAt, MASTERED_HOLD_DAYS),
         nextSchedule: null,
       };
     }
 
-    if (input.quality === ScheduledReviewAnswerQuality.AGAIN) {
-      const nextInterval = ScheduledReviewInterval.ONE_HOUR;
-      const dueAt = this.addInterval(input.answeredAt, nextInterval);
-
-      return {
-        isCorrect: false,
-        nextStatus: UserWordStatus.LEARNING,
-        nextMasteryStep: Math.max(input.currentMasteryStep - 1, 0),
-        nextIntervalDays: this.getIntervalDays(nextInterval),
-        nextReviewAt: dueAt,
-        nextSchedule: {
-          interval: nextInterval,
-          dueAt,
-        },
-      };
+    if (!input.nextInterval) {
+      throw new BadRequestException(
+        'Next review interval is required for this result',
+      );
     }
 
-    const nextInterval = this.getNextIntervalForQuality(input.quality);
-    const isCorrect = true;
-    const nextMasteryStep = Math.min(
-      input.currentMasteryStep + 1,
-      MAX_MASTERY_STEP,
-    );
-
-    if (nextMasteryStep >= MAX_MASTERY_STEP) {
-      return {
-        isCorrect,
-        nextStatus: UserWordStatus.MASTERED,
-        nextMasteryStep,
-        nextIntervalDays: MASTERED_HOLD_DAYS,
-        nextReviewAt: this.addDays(input.answeredAt, MASTERED_HOLD_DAYS),
-        nextSchedule: null,
-      };
-    }
-
-    const dueAt = this.addInterval(input.answeredAt, nextInterval);
+    const isCorrect = input.result === ScheduledReviewAnswerResult.CORRECT;
+    const nextMasteryStep = isCorrect
+      ? Math.min(input.currentMasteryStep + 1, MAX_MASTERY_STEP)
+      : Math.max(input.currentMasteryStep - 1, 0);
 
     return {
       isCorrect,
-      nextStatus: isCorrect
-        ? UserWordStatus.REVIEWING
-        : UserWordStatus.LEARNING,
+      nextStatus:
+        nextMasteryStep >= MAX_MASTERY_STEP
+          ? UserWordStatus.MASTERED
+          : isCorrect
+            ? UserWordStatus.REVIEWING
+            : UserWordStatus.LEARNING,
       nextMasteryStep,
-      nextIntervalDays: this.getIntervalDays(nextInterval),
-      nextReviewAt: dueAt,
       nextSchedule: {
-        interval: nextInterval,
-        dueAt,
+        interval: input.nextInterval,
       },
     };
-  }
-
-  private getNextIntervalForQuality(
-    quality: ScheduledReviewAnswerQuality,
-  ): ScheduledReviewInterval {
-    switch (quality) {
-      case ScheduledReviewAnswerQuality.AGAIN:
-        return ScheduledReviewInterval.ONE_HOUR;
-      case ScheduledReviewAnswerQuality.HARD:
-        return ScheduledReviewInterval.SIX_HOURS;
-      case ScheduledReviewAnswerQuality.GOOD:
-        return ScheduledReviewInterval.ONE_DAY;
-      case ScheduledReviewAnswerQuality.EASY:
-        return ScheduledReviewInterval.THREE_DAYS;
-      default:
-        throw new BadRequestException('Unsupported scheduled review answer');
-    }
-  }
-
-  private getIntervalDays(interval: ScheduledReviewInterval): number {
-    switch (interval) {
-      case ScheduledReviewInterval.ONE_HOUR:
-      case ScheduledReviewInterval.SIX_HOURS:
-        return 0;
-      case ScheduledReviewInterval.ONE_DAY:
-        return 1;
-      case ScheduledReviewInterval.THREE_DAYS:
-        return 3;
-      case ScheduledReviewInterval.ONE_WEEK:
-        return 7;
-    }
   }
 
   private addInterval(date: Date, interval: ScheduledReviewInterval): Date {

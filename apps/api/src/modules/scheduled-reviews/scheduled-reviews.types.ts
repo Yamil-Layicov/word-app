@@ -1,5 +1,6 @@
 import type {
   CefrLevel,
+  ScheduledReviewAnswerResult,
   ScheduledReviewInterval,
   ScheduledReviewState,
   UserStatus,
@@ -45,6 +46,7 @@ export type ScheduledReviewModel = {
   userWordId: string;
   state: ScheduledReviewState;
   interval: ScheduledReviewInterval;
+  answerResult: ScheduledReviewAnswerResult | null;
   startedAt: Date | null;
   dueAt: Date | null;
   completedAt: Date | null;
@@ -107,6 +109,7 @@ export type ScheduledReviewItemsResponse = {
 
 export type ScheduledReviewAnswerResponse = {
   completedScheduleId: string;
+  result: ScheduledReviewAnswerResult;
   nextSchedule: ScheduledReviewItemResponse | null;
   userWord: {
     id: string;
@@ -122,6 +125,7 @@ export type ScheduledReviewAnswerResponse = {
 
 export type AnswerScheduledReviewResult = {
   completedScheduleId: string;
+  result: ScheduledReviewAnswerResult;
   nextSchedule: ScheduledReviewItemResult | null;
   userWord: ScheduledReviewUserWordModel;
 };

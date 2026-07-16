@@ -30,7 +30,7 @@ export type {
   ReviewInterval,
   ReviewIntervalLabel,
   ScheduleUserWordRequest,
-  ScheduledReviewAnswerQuality,
+  ScheduledReviewAnswerResult,
   ScheduledReviewBox,
   ScheduledReviewBoxDetailResponse,
   ScheduledReviewBoxesResponse,

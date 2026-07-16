@@ -15,11 +15,15 @@ export function listScheduledReviews() {
 }
 
 export function getScheduledReviewBoxes() {
-  return authClient.get<ScheduledReviewBoxesResponse>("/scheduled-reviews/boxes");
+  return authClient.get<ScheduledReviewBoxesResponse>(
+    "/scheduled-reviews/boxes",
+  );
 }
 
 export function getScheduledReviewBoxDetail(interval: ScheduledReviewInterval) {
-  return authClient.get<ScheduledReviewBoxDetailResponse>(`/scheduled-reviews/boxes/${interval}`);
+  return authClient.get<ScheduledReviewBoxDetailResponse>(
+    `/scheduled-reviews/boxes/${interval}`,
+  );
 }
 
 export function scheduleUserWord(input: ScheduleUserWordRequest) {
@@ -27,13 +31,17 @@ export function scheduleUserWord(input: ScheduleUserWordRequest) {
 }
 
 export function startScheduledReviewBox(interval: ScheduledReviewInterval) {
-  return authClient.patch<ScheduledReviewBoxDetailResponse>(`/scheduled-reviews/boxes/${interval}/start`);
+  return authClient.patch<ScheduledReviewBoxDetailResponse>(
+    `/scheduled-reviews/boxes/${interval}/start`,
+  );
 }
 
 export function answerScheduledReview(input: AnswerScheduledReviewRequest) {
+  const { scheduleId, ...body } = input;
+
   return authClient.patch<AnswerScheduledReviewResponse>(
-    `/scheduled-reviews/${input.scheduleId}/answer`,
-    { quality: input.quality },
+    `/scheduled-reviews/${scheduleId}/answer`,
+    body,
   );
 }
 

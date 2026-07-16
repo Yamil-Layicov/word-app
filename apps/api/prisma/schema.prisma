@@ -77,6 +77,12 @@ enum ScheduledReviewState {
   CANCELLED
 }
 
+enum ScheduledReviewAnswerResult {
+  INCORRECT
+  CORRECT
+  KNOWN
+}
+
 enum PracticeMode {
   FLASHCARD
   TYPING
@@ -258,12 +264,12 @@ model UserWord {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vocabularyItem VocabularyItem @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vocabularyItem VocabularyItem     @relation(fields: [vocabularyItemId], references: [id], onDelete: Cascade)
   reviewLogs     ReviewLog[]
   practiceLogs   PracticeLog[]
-  schedules       UserWordSchedule[]
-  deckCards       DeckCard[]
+  schedules      UserWordSchedule[]
+  deckCards      DeckCard[]
 
   @@unique([userId, vocabularyItemId])
   @@index([userId])
@@ -308,17 +314,18 @@ model DeckCard {
 }
 
 model UserWordSchedule {
-  id          String                  @id @default(cuid())
-  userId      String
-  userWordId  String
-  state       ScheduledReviewState    @default(QUEUED)
-  interval    ScheduledReviewInterval
-  startedAt   DateTime?
-  dueAt       DateTime?
-  completedAt DateTime?
-  cancelledAt DateTime?
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
+  id           String                       @id @default(cuid())
+  userId       String
+  userWordId   String
+  state        ScheduledReviewState         @default(QUEUED)
+  interval     ScheduledReviewInterval
+  answerResult ScheduledReviewAnswerResult?
+  startedAt    DateTime?
+  dueAt        DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userWord UserWord @relation(fields: [userWordId], references: [id], onDelete: Cascade)

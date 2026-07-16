@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  ScheduledReviewAnswerResult,
   ScheduledReviewInterval,
   ScheduledReviewState,
   UserWordStatus,
@@ -47,14 +48,12 @@ type AnswerDueScheduleInput = {
   languagePairId: string;
   scheduleId: string;
   answeredAt: Date;
+  answerResult: ScheduledReviewAnswerResult;
   isCorrect: boolean;
   nextStatus: UserWordStatus;
   nextMasteryStep: number;
-  nextIntervalDays: number;
-  nextReviewAt: Date;
   nextSchedule: {
     interval: ScheduledReviewInterval;
-    dueAt: Date;
   } | null;
 };
 
@@ -112,6 +111,7 @@ const scheduledReviewWithUserWordSelect = {
   userWordId: true,
   state: true,
   interval: true,
+  answerResult: true,
   startedAt: true,
   dueAt: true,
   completedAt: true,
@@ -253,6 +253,7 @@ export class ScheduledReviewsRepository {
               state: ScheduledReviewState.QUEUED,
               startedAt: null,
               dueAt: null,
+              answerResult: null,
               completedAt: null,
               cancelledAt: null,
             },
@@ -373,15 +374,32 @@ export class ScheduledReviewsRepository {
         return null;
       }
 
-      await tx.userWordSchedule.update({
+      const completedSchedule = await tx.userWordSchedule.updateMany({
         where: {
           id: schedule.id,
+          userId: input.userId,
+          OR: [
+            {
+              state: ScheduledReviewState.DUE,
+            },
+            {
+              state: ScheduledReviewState.STARTED,
+              dueAt: {
+                lte: input.answeredAt,
+              },
+            },
+          ],
         },
         data: {
           state: ScheduledReviewState.COMPLETED,
+          answerResult: input.answerResult,
           completedAt: input.answeredAt,
         },
       });
+
+      if (completedSchedule.count === 0) {
+        return null;
+      }
 
       const updatedUserWord = await tx.userWord.update({
         where: {
@@ -390,7 +408,6 @@ export class ScheduledReviewsRepository {
         data: {
           status: input.nextStatus,
           masteryStep: input.nextMasteryStep,
-          intervalDays: input.nextIntervalDays,
           reviewCount: {
             increment: 1,
           },
@@ -405,7 +422,6 @@ export class ScheduledReviewsRepository {
                 increment: 1,
               },
           lastReviewedAt: input.answeredAt,
-          nextReviewAt: input.nextReviewAt,
         },
         select: scheduledReviewUserWordSelect,
       });
@@ -416,9 +432,7 @@ export class ScheduledReviewsRepository {
               userId: input.userId,
               userWordId: schedule.userWordId,
               interval: input.nextSchedule.interval,
-              state: ScheduledReviewState.STARTED,
-              startedAt: input.answeredAt,
-              dueAt: input.nextSchedule.dueAt,
+              state: ScheduledReviewState.QUEUED,
             },
             select: scheduledReviewWithUserWordSelect,
           })
@@ -426,6 +440,7 @@ export class ScheduledReviewsRepository {
 
       return {
         completedScheduleId: schedule.id,
+        result: input.answerResult,
         nextSchedule: nextSchedule
           ? this.toScheduledReviewItemResult(nextSchedule)
           : null,

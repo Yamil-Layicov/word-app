@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   AudienceScope,
+  DeckPurpose,
   UserWordStatus,
   WordType,
   type CefrLevel,
@@ -183,6 +184,7 @@ export class DecksRepository {
           where: {
             userId: input.userId,
             languagePairId: input.languagePairId,
+            purpose: DeckPurpose.LEARNING,
             isDefault: true,
           },
           data: {
@@ -197,6 +199,7 @@ export class DecksRepository {
           languagePairId: input.languagePairId,
           title: input.title,
           description: input.description ?? null,
+          purpose: DeckPurpose.LEARNING,
           isDefault: input.isDefault,
         },
         select: deckSelect,
@@ -211,6 +214,7 @@ export class DecksRepository {
       where: {
         userId: input.userId,
         languagePairId: input.languagePairId,
+        purpose: DeckPurpose.LEARNING,
       },
       orderBy: [
         {
@@ -232,6 +236,7 @@ export class DecksRepository {
         id: input.deckId,
         userId: input.userId,
         languagePairId: input.languagePairId,
+        purpose: DeckPurpose.LEARNING,
       },
       select: deckSelect,
     });
@@ -246,6 +251,7 @@ export class DecksRepository {
           id: input.deckId,
           userId: input.userId,
           languagePairId: input.languagePairId,
+          purpose: DeckPurpose.LEARNING,
         },
         select: {
           id: true,
@@ -335,6 +341,7 @@ export class DecksRepository {
         deck: {
           userId: input.userId,
           languagePairId: input.languagePairId,
+          purpose: DeckPurpose.LEARNING,
         },
       },
     });

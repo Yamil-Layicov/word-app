@@ -9,6 +9,7 @@ import { CountryModule } from './modules/countries/country.module';
 import { DecksModule } from './modules/decks/decks.module';
 import { LanguagePairModule } from './modules/language-pairs/language-pair.module';
 import { LanguageModule } from './modules/languages/language.module';
+import { MasteredCollectionsModule } from './modules/mastered-collections/mastered-collections.module';
 import { MeModule } from './modules/me/me.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ScheduledReviewsModule } from './modules/scheduled-reviews/scheduled-reviews.module';
@@ -29,6 +30,7 @@ import { PracticeModule } from './modules/practice/practice.module';
     MeModule,
     VocabularyModule,
     DecksModule,
+    MasteredCollectionsModule,
     ReviewsModule,
     ScheduledReviewsModule,
     PracticeModule,

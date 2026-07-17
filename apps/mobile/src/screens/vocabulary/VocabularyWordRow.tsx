@@ -11,6 +11,8 @@ type ScheduledWordPreview = {
 type VocabularyWordRowProps = {
   concealTranslation?: boolean;
   item: VocabularyItem;
+  selected?: boolean;
+  selectionMode?: boolean;
   scheduledWord?: ScheduledWordPreview;
   showScheduledOverlay?: boolean;
   onMenuPress?: () => void;
@@ -20,6 +22,8 @@ type VocabularyWordRowProps = {
 export function VocabularyWordRow({
   concealTranslation = false,
   item,
+  selected = false,
+  selectionMode = false,
   scheduledWord,
   showScheduledOverlay = false,
   onMenuPress,
@@ -141,7 +145,21 @@ export function VocabularyWordRow({
         ) : null}
       </Pressable>
 
-      {onMenuPress ? (
+      {selectionMode ? (
+        <View
+          accessibilityLabel={`${item.sourceText} ${
+            selected ? "selected" : "not selected"
+          }`}
+          style={[
+            styles.selectionIndicator,
+            selected ? styles.selectionIndicatorSelected : null,
+          ]}
+        >
+          {selected ? (
+            <Ionicons name="checkmark" size={17} color={colors.white} />
+          ) : null}
+        </View>
+      ) : onMenuPress ? (
         <Pressable
           accessibilityLabel={`Open actions for ${item.sourceText}`}
           accessibilityRole="button"
@@ -309,6 +327,21 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
+  },
+  selectionIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: radii.pill,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 3,
+  },
+  selectionIndicatorSelected: {
+    borderColor: colors.orange,
+    backgroundColor: colors.orange,
   },
   pressed: {
     opacity: 0.72,

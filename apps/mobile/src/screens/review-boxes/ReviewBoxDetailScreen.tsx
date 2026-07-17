@@ -1,12 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import {
-  type VocabularyItem,
-  useVocabularyItemsQuery,
-} from "@/entities/vocabulary-item";
+import type { VocabularyItem } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   REVIEW_INTERVALS,
@@ -29,28 +26,26 @@ import { ScheduledWordActionSheet } from "./ScheduledWordActionSheet";
 
 const EMPTY_SCHEDULED_ITEMS: ScheduledReviewItem[] = [];
 
-export function ReviewBoxDetailScreen() {
+type ReviewBoxDetailScreenProps = {
+  boxId?: string;
+};
+
+export function ReviewBoxDetailScreen({ boxId }: ReviewBoxDetailScreenProps) {
   const router = useRouter();
-  const params = useLocalSearchParams<{ boxId?: string | string[] }>();
-  const boxId = getParamValue(params.boxId);
   const intervalId = parseScheduledReviewInterval(boxId);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedScheduledItem, setSelectedScheduledItem] =
     useState<ScheduledReviewItem | null>(null);
-  const [selectedMasteredItem, setSelectedMasteredItem] =
-    useState<VocabularyItem | null>(null);
   const [isReviewModePickerVisible, setReviewModePickerVisible] =
     useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const boxDetailQuery = useScheduledReviewBoxDetailQuery(intervalId);
-  const vocabularyQuery = useVocabularyItemsQuery({ limit: 100 });
   const cancelMutation = useCancelScheduledReview();
   const scheduleMutation = useScheduleUserWord();
   const startMutation = useStartScheduledReviewBox();
   const hasUnauthorizedError = useAuthFailureRedirect(
-    vocabularyQuery.error ??
-      boxDetailQuery.error ??
+    boxDetailQuery.error ??
       cancelMutation.error ??
       scheduleMutation.error ??
       startMutation.error,
@@ -59,19 +54,13 @@ export function ReviewBoxDetailScreen() {
   const interval = intervalId
     ? getReviewIntervalByApiInterval(intervalId)
     : undefined;
-  const isMasteredBox = boxId === "mastered";
-  const masteredItems = (vocabularyQuery.data?.items ?? []).filter(
-    (item) => item.userWord.status === "MASTERED",
-  );
   const scheduledItems = boxDetailQuery.data?.items ?? EMPTY_SCHEDULED_ITEMS;
   const groupedItems = useMemo(
     () => groupScheduledItems(scheduledItems, nowMs),
     [scheduledItems, nowMs],
   );
   const waitingItems = [...groupedItems.started, ...groupedItems.queued];
-  const visibleItemCount = isMasteredBox
-    ? masteredItems.length
-    : scheduledItems.length;
+  const visibleItemCount = scheduledItems.length;
   const isUpdating =
     cancelMutation.isPending ||
     scheduleMutation.isPending ||
@@ -109,36 +98,6 @@ export function ReviewBoxDetailScreen() {
     }
   };
 
-  const scheduleMasteredWord = async (
-    nextInterval: ScheduledReviewInterval,
-  ) => {
-    if (!selectedMasteredItem) {
-      return;
-    }
-
-    const item = selectedMasteredItem;
-    setNotice(null);
-
-    try {
-      await scheduleMutation.mutateAsync({
-        userWordId: item.userWord.id,
-        interval: nextInterval,
-      });
-      setSelectedMasteredItem(null);
-      setNotice(
-        `${item.sourceText} added to ${getIntervalLabel(nextInterval)}.`,
-      );
-    } catch (error) {
-      if (!isApiError(error) || error.status !== 401) {
-        setNotice(
-          isApiError(error)
-            ? error.message
-            : "Could not schedule this mastered word.",
-        );
-      }
-    }
-  };
-
   const removeScheduledWord = async () => {
     if (!selectedScheduledItem) {
       return;
@@ -160,15 +119,7 @@ export function ReviewBoxDetailScreen() {
     }
   };
 
-  const title = isMasteredBox
-    ? "Mastered Words"
-    : `${interval?.label ?? "Review"} box`;
-  const isLoading = isMasteredBox
-    ? vocabularyQuery.isLoading
-    : boxDetailQuery.isLoading;
-  const isError = isMasteredBox
-    ? vocabularyQuery.isError
-    : boxDetailQuery.isError;
+  const title = `${interval?.label ?? "Review"} box`;
 
   return (
     <ScreenContainer
@@ -224,50 +175,26 @@ export function ReviewBoxDetailScreen() {
 
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
-      {!interval && !isMasteredBox ? (
-        <StateBox title="Review box not found." />
-      ) : null}
+      {!interval ? <StateBox title="Review box not found." /> : null}
 
-      {isLoading ? <StateBox title="Loading words..." /> : null}
+      {boxDetailQuery.isLoading ? <StateBox title="Loading words..." /> : null}
 
-      {isError && !hasUnauthorizedError ? (
+      {boxDetailQuery.isError && !hasUnauthorizedError ? (
         <StateBox
           title="Could not load words."
           actionTitle="Try again"
-          onAction={() => {
-            if (isMasteredBox) {
-              void vocabularyQuery.refetch();
-            } else {
-              void boxDetailQuery.refetch();
-            }
-          }}
+          onAction={() => void boxDetailQuery.refetch()}
         />
       ) : null}
 
-      {!isLoading &&
-      !isError &&
-      (interval || isMasteredBox) &&
+      {!boxDetailQuery.isLoading &&
+      !boxDetailQuery.isError &&
+      interval &&
       visibleItemCount === 0 ? (
         <StateBox title="No words in this box yet." />
       ) : null}
 
-      {isMasteredBox
-        ? masteredItems.map((item) => (
-            <VocabularyWordRow
-              key={item.id}
-              item={item}
-              onMenuPress={() => setSelectedMasteredItem(item)}
-              onPress={() =>
-                router.push({
-                  pathname: "/vocabulary/[id]",
-                  params: { id: item.id },
-                })
-              }
-            />
-          ))
-        : null}
-
-      {!isMasteredBox && groupedItems.due.length > 0 ? (
+      {groupedItems.due.length > 0 ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ready to review</Text>
           {groupedItems.due.map((item) => (
@@ -282,7 +209,7 @@ export function ReviewBoxDetailScreen() {
         </View>
       ) : null}
 
-      {!isMasteredBox && waitingItems.length > 0 ? (
+      {waitingItems.length > 0 ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
             {groupedItems.due.length > 0 ? "Waiting" : "Words"}
@@ -333,16 +260,6 @@ export function ReviewBoxDetailScreen() {
         }}
         onRemove={() => {
           void removeScheduledWord();
-        }}
-      />
-
-      <ScheduledWordActionSheet
-        disabled={isUpdating}
-        title={selectedMasteredItem?.sourceText ?? "Mastered word"}
-        visible={Boolean(selectedMasteredItem)}
-        onClose={() => setSelectedMasteredItem(null)}
-        onMove={(nextInterval) => {
-          void scheduleMasteredWord(nextInterval);
         }}
       />
     </ScreenContainer>
@@ -435,10 +352,6 @@ function toVocabularyItem(item: ScheduledReviewItem): VocabularyItem {
 
 function getIntervalLabel(interval: ScheduledReviewInterval): string {
   return getReviewIntervalByApiInterval(interval)?.label ?? interval;
-}
-
-function getParamValue(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
 }
 
 function parseScheduledReviewInterval(

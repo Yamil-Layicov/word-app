@@ -13,7 +13,8 @@ import { queryClient } from "@/shared/lib/query-client";
 
 export function useSetActiveLanguagePair() {
   return useMutation({
-    mutationFn: (input: SetActiveLanguagePairRequest) => setActiveLanguagePair(input),
+    mutationFn: (input: SetActiveLanguagePairRequest) =>
+      setActiveLanguagePair(input),
     onSuccess: (profile, input) => {
       queryClient.setQueryData(userQueryKeys.profile(), profile);
       queryClient.setQueryData<UserLanguagePair[]>(
@@ -24,7 +25,7 @@ export function useSetActiveLanguagePair() {
             isActive: languagePair.languagePairId === input.languagePairId,
           })),
       );
-      void queryClient.invalidateQueries({ queryKey: userLanguagePairQueryKeys.list() });
+      void queryClient.invalidateQueries();
     },
   });
 }

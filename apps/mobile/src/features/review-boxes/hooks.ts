@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 
+import { masteredCollectionQueryKeys } from "@/entities/mastered-collection";
 import { practiceItemQueryKeys } from "@/entities/practice";
 import { reviewQueryKeys } from "@/entities/review";
 import { vocabularyItemQueryKeys } from "@/entities/vocabulary-item";
@@ -18,11 +19,22 @@ import type {
 import { scheduledReviewQueryKeys } from "./query-keys";
 
 function invalidateScheduledReviewData() {
-  void queryClient.invalidateQueries({ queryKey: scheduledReviewQueryKeys.all });
-  void queryClient.invalidateQueries({ queryKey: vocabularyItemQueryKeys.lists() });
-  void queryClient.invalidateQueries({ queryKey: vocabularyItemQueryKeys.details() });
+  void queryClient.invalidateQueries({
+    queryKey: scheduledReviewQueryKeys.all,
+  });
+  void queryClient.invalidateQueries({
+    queryKey: vocabularyItemQueryKeys.lists(),
+  });
+  void queryClient.invalidateQueries({
+    queryKey: vocabularyItemQueryKeys.details(),
+  });
   void queryClient.invalidateQueries({ queryKey: reviewQueryKeys.all });
-  void queryClient.invalidateQueries({ queryKey: practiceItemQueryKeys.lists() });
+  void queryClient.invalidateQueries({
+    queryKey: practiceItemQueryKeys.lists(),
+  });
+  void queryClient.invalidateQueries({
+    queryKey: masteredCollectionQueryKeys.all,
+  });
 }
 
 export function useScheduleUserWord() {
@@ -34,14 +46,16 @@ export function useScheduleUserWord() {
 
 export function useStartScheduledReviewBox() {
   return useMutation({
-    mutationFn: (interval: ScheduledReviewInterval) => startScheduledReviewBox(interval),
+    mutationFn: (interval: ScheduledReviewInterval) =>
+      startScheduledReviewBox(interval),
     onSuccess: invalidateScheduledReviewData,
   });
 }
 
 export function useAnswerScheduledReview() {
   return useMutation({
-    mutationFn: (input: AnswerScheduledReviewRequest) => answerScheduledReview(input),
+    mutationFn: (input: AnswerScheduledReviewRequest) =>
+      answerScheduledReview(input),
     onSuccess: invalidateScheduledReviewData,
   });
 }

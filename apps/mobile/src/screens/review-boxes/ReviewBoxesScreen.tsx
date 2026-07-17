@@ -3,7 +3,10 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { useVocabularyItemsQuery, type VocabularyItem } from "@/entities/vocabulary-item";
+import {
+  useVocabularyItemsQuery,
+  type VocabularyItem,
+} from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   REVIEW_INTERVALS,
@@ -29,6 +32,7 @@ type ReviewBoxViewModel = {
 
 type MasteredBoxViewModel = {
   detailLabel: string;
+  hasMoreWords: boolean;
   kind: "mastered";
   status: "mastered";
   title: string;
@@ -42,7 +46,10 @@ export function ReviewBoxesScreen() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const scheduledBoxesQuery = useScheduledReviewBoxesQuery();
   const startScheduledReviewBoxMutation = useStartScheduledReviewBox();
-  const vocabularyQuery = useVocabularyItemsQuery({ limit: 100 });
+  const vocabularyQuery = useVocabularyItemsQuery({
+    status: "MASTERED",
+    limit: 50,
+  });
   const hasUnauthorizedError = useAuthFailureRedirect(
     vocabularyQuery.error ??
       scheduledBoxesQuery.error ??
@@ -54,9 +61,15 @@ export function ReviewBoxesScreen() {
         REVIEW_INTERVALS,
         scheduledBoxesQuery.data?.boxes ?? [],
         vocabularyQuery.data?.items ?? [],
+        Boolean(vocabularyQuery.data?.nextCursor),
         nowMs,
       ),
-    [nowMs, scheduledBoxesQuery.data?.boxes, vocabularyQuery.data?.items],
+    [
+      nowMs,
+      scheduledBoxesQuery.data?.boxes,
+      vocabularyQuery.data?.items,
+      vocabularyQuery.data?.nextCursor,
+    ],
   );
 
   useEffect(() => {
@@ -66,13 +79,19 @@ export function ReviewBoxesScreen() {
   }, []);
 
   return (
-    <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
+    <ScreenContainer
+      backgroundColor={colors.backgroundWarm}
+      contentStyle={styles.content}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>Review Boxes</Text>
-        <Text style={styles.subtitle}>Start a box when you are ready. Timers do not run before Start.</Text>
+        <Text style={styles.subtitle}>
+          Start a box when you are ready. Timers do not run before Start.
+        </Text>
       </View>
 
-      {(vocabularyQuery.isError || scheduledBoxesQuery.isError) && !hasUnauthorizedError ? (
+      {(vocabularyQuery.isError || scheduledBoxesQuery.isError) &&
+      !hasUnauthorizedError ? (
         <View style={styles.stateBox}>
           <Text style={styles.stateTitle}>Could not load review boxes.</Text>
           <Button
@@ -95,7 +114,10 @@ export function ReviewBoxesScreen() {
               router.push({
                 pathname: "/decks/[boxId]",
                 params: {
-                  boxId: box.kind === "interval" ? box.interval.apiInterval : "mastered",
+                  boxId:
+                    box.kind === "interval"
+                      ? box.interval.apiInterval
+                      : "mastered",
                 },
               });
             }}
@@ -122,7 +144,12 @@ type ReviewBoxCardProps = {
   startPending: boolean;
 };
 
-function ReviewBoxCard({ box, onOpen, onStart, startPending }: ReviewBoxCardProps) {
+function ReviewBoxCard({
+  box,
+  onOpen,
+  onStart,
+  startPending,
+}: ReviewBoxCardProps) {
   const canStart = box.kind === "interval" && box.queuedCount > 0;
   const isDue = box.kind === "interval" && box.status === "due";
   const isRunning = box.kind === "interval" && box.status === "started";
@@ -145,10 +172,25 @@ function ReviewBoxCard({ box, onOpen, onStart, startPending }: ReviewBoxCardProp
       onPress={onOpen}
     >
       <View style={styles.boxHeaderRow}>
-        <Text numberOfLines={1} style={styles.boxTitle}>{title}</Text>
-        <View style={[styles.wordCountBadge, box.wordCount > 0 ? styles.wordCountBadgeFilled : null]}>
-          <Text style={[styles.wordCountBadgeText, box.wordCount > 0 ? styles.wordCountBadgeTextFilled : null]}>
-            {getBoxCountLabel(box.wordCount)}
+        <Text numberOfLines={1} style={styles.boxTitle}>
+          {title}
+        </Text>
+        <View
+          style={[
+            styles.wordCountBadge,
+            box.wordCount > 0 ? styles.wordCountBadgeFilled : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.wordCountBadgeText,
+              box.wordCount > 0 ? styles.wordCountBadgeTextFilled : null,
+            ]}
+          >
+            {getBoxCountLabel(
+              box.wordCount,
+              box.kind === "mastered" && box.hasMoreWords,
+            )}
           </Text>
         </View>
       </View>
@@ -159,18 +201,24 @@ function ReviewBoxCard({ box, onOpen, onStart, startPending }: ReviewBoxCardProp
 
       {isActive ? (
         <View style={styles.activeBoxPanel}>
-          <Text style={[styles.activeCountdown, isDue ? styles.activeCountdownDue : null]}>
+          <Text
+            style={[
+              styles.activeCountdown,
+              isDue ? styles.activeCountdownDue : null,
+            ]}
+          >
             {getActiveCountdownLabel(box)}
           </Text>
           <Text style={styles.activePrompt}>Tap to review words</Text>
-          <Text style={styles.activeHint}>
-            {getActiveHint(box)}
-          </Text>
+          <Text style={styles.activeHint}>{getActiveHint(box)}</Text>
           {canStart ? (
             <Pressable
               accessibilityRole="button"
               disabled={startPending}
-              style={({ pressed }) => [styles.startQueuedButton, pressed ? styles.pressed : null]}
+              style={({ pressed }) => [
+                styles.startQueuedButton,
+                pressed ? styles.pressed : null,
+              ]}
               onPress={onStart}
             >
               <Text style={styles.startQueuedButtonText}>Start queued</Text>
@@ -191,7 +239,9 @@ function ReviewBoxCard({ box, onOpen, onStart, startPending }: ReviewBoxCardProp
               ]}
               onPress={onStart}
             >
-              <Text style={styles.startButtonText}>{getButtonLabel(box.status)}</Text>
+              <Text style={styles.startButtonText}>
+                {getButtonLabel(box.status)}
+              </Text>
             </Pressable>
           ) : null}
         </>
@@ -207,13 +257,21 @@ type BoxIllustrationProps = {
 
 function BoxIllustration({ due, mastered }: BoxIllustrationProps) {
   return (
-    <View style={[styles.boxArt, due ? styles.boxArtDue : null, mastered ? styles.boxArtMastered : null]}>
+    <View
+      style={[
+        styles.boxArt,
+        due ? styles.boxArtDue : null,
+        mastered ? styles.boxArtMastered : null,
+      ]}
+    >
       <View style={styles.boxLid} />
       <View style={styles.boxBody}>
         <View style={styles.boxStrap} />
         <View style={styles.boxLatch}>
           <Ionicons
-            name={mastered ? "checkmark" : due ? "alarm-outline" : "time-outline"}
+            name={
+              mastered ? "checkmark" : due ? "alarm-outline" : "time-outline"
+            }
             size={13}
             color={mastered ? colors.green : due ? colors.orange : colors.navy}
           />
@@ -227,10 +285,13 @@ function buildReviewGridBoxes(
   intervals: ReviewInterval[],
   scheduledBoxes: ScheduledReviewBox[],
   vocabularyItems: VocabularyItem[],
+  hasMoreMasteredWords: boolean,
   nowMs: number,
 ) {
   const intervalBoxes = intervals.map((interval) => {
-    const scheduledBox = scheduledBoxes.find((box) => box.interval === interval.apiInterval);
+    const scheduledBox = scheduledBoxes.find(
+      (box) => box.interval === interval.apiInterval,
+    );
     const timing = getBoxTiming(scheduledBox, nowMs);
 
     return {
@@ -244,12 +305,15 @@ function buildReviewGridBoxes(
       wordCount: scheduledBox?.totalWords ?? 0,
     };
   });
-  const masteredItems = vocabularyItems.filter((item) => item.userWord.status === "MASTERED");
+  const masteredItems = vocabularyItems.filter(
+    (item) => item.userWord.status === "MASTERED",
+  );
 
   return [
     ...intervalBoxes,
     {
       detailLabel: "Words you marked as fully known.",
+      hasMoreWords: hasMoreMasteredWords,
       kind: "mastered" as const,
       status: "mastered" as const,
       title: "Mastered Words",
@@ -261,7 +325,10 @@ function buildReviewGridBoxes(
 function getBoxTiming(
   scheduledBox: ScheduledReviewBox | undefined,
   nowMs: number,
-): Pick<ReviewBoxViewModel, "detailLabel" | "dueCount" | "nextDueAt" | "queuedCount" | "status"> {
+): Pick<
+  ReviewBoxViewModel,
+  "detailLabel" | "dueCount" | "nextDueAt" | "queuedCount" | "status"
+> {
   const wordCount = scheduledBox?.totalWords ?? 0;
 
   if (wordCount === 0) {
@@ -275,10 +342,12 @@ function getBoxTiming(
   }
 
   const queuedCount = scheduledBox?.queuedWords ?? 0;
-  const parsedNextDueAt = scheduledBox?.nextDueAt ? Date.parse(scheduledBox.nextDueAt) : null;
+  const parsedNextDueAt = scheduledBox?.nextDueAt
+    ? Date.parse(scheduledBox.nextDueAt)
+    : null;
   const elapsedStartedWords =
     parsedNextDueAt !== null && parsedNextDueAt <= nowMs
-      ? scheduledBox?.startedWords ?? 0
+      ? (scheduledBox?.startedWords ?? 0)
       : 0;
   const dueCount = Math.max(scheduledBox?.dueWords ?? 0, elapsedStartedWords);
   const nextDueAt = dueCount > 0 ? null : parsedNextDueAt;
@@ -366,18 +435,24 @@ function getActiveHint(box: ReviewGridBox) {
   }
 
   if (box.status === "due") {
-    return box.queuedCount > 0 ? `${box.queuedCount} queued words are waiting.` : "This box is ready now.";
+    return box.queuedCount > 0
+      ? `${box.queuedCount} queued words are waiting.`
+      : "This box is ready now.";
   }
 
-  return box.queuedCount > 0 ? `${box.queuedCount} queued words are waiting.` : "Each word keeps its own timer.";
+  return box.queuedCount > 0
+    ? `${box.queuedCount} queued words are waiting.`
+    : "Each word keeps its own timer.";
 }
 
-function getBoxCountLabel(wordCount: number) {
+function getBoxCountLabel(wordCount: number, hasMoreWords = false) {
   if (wordCount === 0) {
     return "Empty";
   }
 
-  return `${wordCount} ${wordCount === 1 ? "word" : "words"}`;
+  return `${wordCount}${hasMoreWords ? "+" : ""} ${
+    wordCount === 1 ? "word" : "words"
+  }`;
 }
 
 const styles = StyleSheet.create({

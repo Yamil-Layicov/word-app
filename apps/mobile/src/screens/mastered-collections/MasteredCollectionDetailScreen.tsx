@@ -12,6 +12,7 @@ import {
   useDeleteMasteredCollection,
   useRemoveMasteredCollectionWord,
 } from "@/features/mastered-collections";
+import type { PracticeSessionMode } from "@/features/practice";
 import {
   getReviewIntervalByApiInterval,
   useScheduleUserWord,
@@ -22,6 +23,7 @@ import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 import { VocabularyWordRow } from "@/screens/vocabulary/VocabularyWordRow";
+import { ReviewModePicker } from "@/screens/review-boxes/ReviewModePicker";
 import { ScheduledWordActionSheet } from "@/screens/review-boxes/ScheduledWordActionSheet";
 import { MasteredWordActionSheet } from "./MasteredWordActionSheet";
 
@@ -47,6 +49,7 @@ export function MasteredCollectionDetailScreen() {
     useState<MasteredCollectionWord | null>(null);
   const [actionMode, setActionMode] = useState<ActionMode>(null);
   const [confirmMode, setConfirmMode] = useState<ConfirmMode>(null);
+  const [isModePickerVisible, setModePickerVisible] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const collection = collectionQuery.data;
   const isUpdating =
@@ -149,6 +152,21 @@ export function MasteredCollectionDetailScreen() {
     }
   };
 
+  const startPractice = (mode: PracticeSessionMode) => {
+    if (!collection) {
+      return;
+    }
+
+    setModePickerVisible(false);
+    router.push({
+      pathname: "/decks/collections/[collectionId]/practice",
+      params: {
+        collectionId: collection.id,
+        mode,
+      },
+    });
+  };
+
   return (
     <ScreenContainer
       backgroundColor={colors.backgroundWarm}
@@ -176,17 +194,33 @@ export function MasteredCollectionDetailScreen() {
           </Text>
         </View>
         {collection ? (
-          <Pressable
-            accessibilityLabel="Delete collection"
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.deleteButton,
-              pressed ? styles.pressed : null,
-            ]}
-            onPress={() => setConfirmMode("collection")}
-          >
-            <Ionicons name="trash-outline" size={20} color={colors.error} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            {collection.items.length > 0 ? (
+              <Pressable
+                accessibilityLabel="Practice collection"
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.playButton,
+                  pressed ? styles.pressed : null,
+                ]}
+                onPress={() => setModePickerVisible(true)}
+              >
+                <Ionicons name="play" size={16} color={colors.white} />
+                <Text style={styles.playButtonText}>Play</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityLabel="Delete collection"
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.deleteButton,
+                pressed ? styles.pressed : null,
+              ]}
+              onPress={() => setConfirmMode("collection")}
+            >
+              <Ionicons name="trash-outline" size={20} color={colors.error} />
+            </Pressable>
+          </View>
         ) : null}
       </View>
 
@@ -260,6 +294,17 @@ export function MasteredCollectionDetailScreen() {
         onMove={(interval) => {
           void scheduleSelectedWord(interval);
         }}
+      />
+
+      <ReviewModePicker
+        canUseMultipleChoice={
+          new Set(collection?.items.map((item) => item.targetText)).size >= 2
+        }
+        title="Practice collection"
+        visible={isModePickerVisible}
+        wordCount={collection?.items.length ?? 0}
+        onClose={() => setModePickerVisible(false)}
+        onSelect={startPractice}
       />
 
       <ConfirmModal
@@ -418,6 +463,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF1F1",
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  playButton: {
+    minHeight: 40,
+    borderRadius: radii.pill,
+    backgroundColor: colors.orange,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  playButtonText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: typography.weights.black,
   },
   headerText: {
     flex: 1,

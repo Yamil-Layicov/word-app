@@ -1,22 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { ReviewSessionMode } from "@/features/review-boxes";
+import type { PracticeSessionMode } from "@/features/practice";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 
 type ReviewModePickerProps = {
   canUseMultipleChoice: boolean;
-  dueWordCount: number;
   onClose: () => void;
-  onSelect: (mode: ReviewSessionMode) => void;
+  onSelect: (mode: PracticeSessionMode) => void;
+  title?: string;
   visible: boolean;
+  wordCount: number;
 };
 
 type ReviewModeOption = {
   description: string;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  mode?: ReviewSessionMode;
+  mode?: PracticeSessionMode;
 };
 
 const REVIEW_MODE_OPTIONS: ReviewModeOption[] = [
@@ -47,10 +48,11 @@ const REVIEW_MODE_OPTIONS: ReviewModeOption[] = [
 
 export function ReviewModePicker({
   canUseMultipleChoice,
-  dueWordCount,
   onClose,
   onSelect,
+  title = "Choose a review mode",
   visible,
+  wordCount,
 }: ReviewModePickerProps) {
   return (
     <Modal
@@ -64,9 +66,9 @@ export function ReviewModePicker({
           <View style={styles.handle} />
           <View style={styles.header}>
             <View style={styles.headerText}>
-              <Text style={styles.title}>Choose a review mode</Text>
+              <Text style={styles.title}>{title}</Text>
               <Text style={styles.subtitle}>
-                {dueWordCount} {dueWordCount === 1 ? "word" : "words"} ready
+                {wordCount} {wordCount === 1 ? "word" : "words"} ready
               </Text>
             </View>
             <Pressable

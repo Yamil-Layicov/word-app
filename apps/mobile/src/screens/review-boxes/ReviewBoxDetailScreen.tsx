@@ -230,8 +230,8 @@ export function ReviewBoxDetailScreen({ boxId }: ReviewBoxDetailScreenProps) {
         canUseMultipleChoice={
           new Set(groupedItems.due.map((item) => item.targetText)).size >= 2
         }
-        dueWordCount={groupedItems.due.length}
         visible={isReviewModePickerVisible}
+        wordCount={groupedItems.due.length}
         onClose={() => setReviewModePickerVisible(false)}
         onSelect={(mode) => {
           if (!interval) {

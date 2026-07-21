@@ -2,20 +2,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import type {
-  ReviewSessionMode,
-  ScheduledReviewAnswerResult,
-  ScheduledReviewItem,
-} from "@/features/review-boxes";
+import type { PracticeSessionMode } from "@/features/practice";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 
-type ReviewAnswerResult = Exclude<ScheduledReviewAnswerResult, "KNOWN">;
+export type PracticeAnswerResult = "CORRECT" | "INCORRECT";
+
+type PracticePromptItem = {
+  sourceText: string;
+  targetText: string;
+};
 
 type ReviewSessionPromptProps = {
   choiceOptions: string[];
-  item: ScheduledReviewItem;
-  mode: ReviewSessionMode;
-  onAnswer: (result: ReviewAnswerResult) => void;
+  item: PracticePromptItem;
+  mode: PracticeSessionMode;
+  onAnswer: (result: PracticeAnswerResult) => void;
 };
 
 export function ReviewSessionPrompt({
@@ -63,7 +64,7 @@ export function ReviewSessionPrompt({
 
 type FlashcardPromptProps = {
   answerVisible: boolean;
-  onAnswer: (result: ReviewAnswerResult) => void;
+  onAnswer: (result: PracticeAnswerResult) => void;
   onReveal: () => void;
   targetText: string;
 };
@@ -113,7 +114,7 @@ function FlashcardPrompt({
 }
 
 type WritingPromptProps = {
-  onAnswer: (result: ReviewAnswerResult) => void;
+  onAnswer: (result: PracticeAnswerResult) => void;
   onChangeText: (value: string) => void;
   targetText: string;
   value: string;
@@ -169,7 +170,7 @@ function WritingPrompt({
 }
 
 type MultipleChoicePromptProps = {
-  onAnswer: (result: ReviewAnswerResult) => void;
+  onAnswer: (result: PracticeAnswerResult) => void;
   options: string[];
   targetText: string;
 };
@@ -229,7 +230,11 @@ function GradeButton({ icon, label, onPress, tone }: GradeButtonProps) {
 }
 
 function normalizeAnswer(value: string) {
-  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
 }
 
 const styles = StyleSheet.create({

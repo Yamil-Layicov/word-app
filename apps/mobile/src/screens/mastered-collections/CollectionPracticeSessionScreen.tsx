@@ -3,70 +3,63 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import {
+  type MasteredCollectionWord,
+  useMasteredCollectionQuery,
+} from "@/entities/mastered-collection";
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   buildPracticeChoiceOptions,
   getPracticeSessionModeLabel,
   parsePracticeSessionMode,
+  useAnswerPractice,
 } from "@/features/practice";
 import {
-  REVIEW_INTERVALS,
-  getReviewIntervalByApiInterval,
-  isScheduledReviewItemDue,
-  useAnswerScheduledReview,
-  useScheduledReviewBoxDetailQuery,
-  type ScheduledReviewAnswerResult,
+  useScheduleUserWord,
   type ScheduledReviewInterval,
-  type ScheduledReviewItem,
 } from "@/features/review-boxes";
+import { ReviewDestinationPicker } from "@/screens/review-boxes/ReviewDestinationPicker";
+import {
+  ReviewSessionPrompt,
+  type PracticeAnswerResult,
+} from "@/screens/review-boxes/ReviewSessionPrompt";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
-import { ReviewDestinationPicker } from "./ReviewDestinationPicker";
-import {
-  ReviewSessionPrompt,
-  type PracticeAnswerResult,
-} from "./ReviewSessionPrompt";
 
-type ReviewAnswerResult = PracticeAnswerResult;
-
-export function ReviewSessionScreen() {
+export function CollectionPracticeSessionScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
-    boxId?: string | string[];
+    collectionId?: string | string[];
     mode?: string | string[];
   }>();
-  const interval = parseScheduledReviewInterval(getParamValue(params.boxId));
+  const collectionId = getParamValue(params.collectionId) ?? "";
   const mode = parsePracticeSessionMode(getParamValue(params.mode));
+  const collectionQuery = useMasteredCollectionQuery(collectionId);
+  const answerMutation = useAnswerPractice();
+  const scheduleMutation = useScheduleUserWord();
   const [sessionItems, setSessionItems] = useState<
-    ScheduledReviewItem[] | null
+    MasteredCollectionWord[] | null
   >(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answerResult, setAnswerResult] = useState<ReviewAnswerResult | null>(
+  const [correctCount, setCorrectCount] = useState(0);
+  const [answerResult, setAnswerResult] = useState<PracticeAnswerResult | null>(
     null,
   );
   const [notice, setNotice] = useState<string | null>(null);
   const submissionInFlightRef = useRef(false);
-
-  const boxDetailQuery = useScheduledReviewBoxDetailQuery(interval);
-  const answerMutation = useAnswerScheduledReview();
   const hasUnauthorizedError = useAuthFailureRedirect(
-    boxDetailQuery.error ?? answerMutation.error,
+    collectionQuery.error ?? answerMutation.error ?? scheduleMutation.error,
   );
 
   useEffect(() => {
-    if (sessionItems !== null || !boxDetailQuery.data) {
+    if (sessionItems !== null || !collectionQuery.data) {
       return;
     }
 
-    const nowMs = Date.now();
-    setSessionItems(
-      boxDetailQuery.data.items.filter((item) =>
-        isScheduledReviewItemDue(item, nowMs),
-      ),
-    );
-  }, [boxDetailQuery.data, sessionItems]);
+    setSessionItems(collectionQuery.data.items);
+  }, [collectionQuery.data, sessionItems]);
 
   const currentItem = sessionItems?.[currentIndex];
   const choiceOptions = useMemo(
@@ -76,18 +69,12 @@ export function ReviewSessionScreen() {
         : [],
     [currentIndex, currentItem, sessionItems],
   );
-  const intervalLabel = interval
-    ? getReviewIntervalByApiInterval(interval)?.label
-    : undefined;
   const isComplete =
     sessionItems !== null &&
     sessionItems.length > 0 &&
     currentIndex >= sessionItems.length;
 
-  const completeReview = async (
-    result: ScheduledReviewAnswerResult,
-    nextInterval?: ScheduledReviewInterval,
-  ) => {
+  const recordAnswer = async (result: PracticeAnswerResult) => {
     if (!currentItem || !mode || submissionInFlightRef.current) {
       return;
     }
@@ -96,27 +83,17 @@ export function ReviewSessionScreen() {
     setNotice(null);
 
     try {
-      if (result === "KNOWN") {
-        await answerMutation.mutateAsync({
-          practiceMode: mode,
-          scheduleId: currentItem.scheduleId,
-          result,
-        });
-      } else {
-        if (!nextInterval) {
-          return;
-        }
+      await answerMutation.mutateAsync({
+        userWordId: currentItem.userWord.id,
+        isCorrect: result === "CORRECT",
+        practiceMode: mode,
+      });
 
-        await answerMutation.mutateAsync({
-          practiceMode: mode,
-          scheduleId: currentItem.scheduleId,
-          result,
-          nextInterval,
-        });
+      if (result === "CORRECT") {
+        setCorrectCount((count) => count + 1);
       }
 
-      setAnswerResult(null);
-      setCurrentIndex((index) => index + 1);
+      setAnswerResult(result);
     } catch (error) {
       if (!isApiError(error) || error.status !== 401) {
         setNotice(
@@ -128,15 +105,50 @@ export function ReviewSessionScreen() {
     }
   };
 
+  const moveCurrentWordToReviewBox = async (
+    interval: ScheduledReviewInterval,
+  ) => {
+    if (!currentItem || submissionInFlightRef.current) {
+      return;
+    }
+
+    submissionInFlightRef.current = true;
+    setNotice(null);
+
+    try {
+      await scheduleMutation.mutateAsync({
+        userWordId: currentItem.userWord.id,
+        interval,
+      });
+      advanceToNextWord();
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(
+          isApiError(error)
+            ? error.message
+            : "Could not add this word to the review box.",
+        );
+      }
+    } finally {
+      submissionInFlightRef.current = false;
+    }
+  };
+
+  const advanceToNextWord = () => {
+    setAnswerResult(null);
+    setNotice(null);
+    setCurrentIndex((index) => index + 1);
+  };
+
   const finishSession = () => {
-    if (!interval) {
+    if (!collectionId) {
       router.back();
       return;
     }
 
     router.replace({
-      pathname: "/decks/[boxId]",
-      params: { boxId: interval },
+      pathname: "/decks/collections/[collectionId]",
+      params: { collectionId },
     });
   };
 
@@ -147,7 +159,7 @@ export function ReviewSessionScreen() {
     >
       <View style={styles.topBar}>
         <Pressable
-          accessibilityLabel="Leave review"
+          accessibilityLabel="Leave practice"
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.iconButton,
@@ -160,7 +172,7 @@ export function ReviewSessionScreen() {
 
         <View style={styles.headerText}>
           <Text numberOfLines={1} style={styles.title}>
-            {intervalLabel ? `${intervalLabel} review` : "Review"}
+            {collectionQuery.data?.title ?? "Collection practice"}
           </Text>
           <Text style={styles.subtitle}>
             {mode ? getPracticeSessionModeLabel(mode) : "Choose a valid mode"}
@@ -191,41 +203,44 @@ export function ReviewSessionScreen() {
         </View>
       ) : null}
 
-      {!interval || !mode ? (
+      {!collectionId || !mode ? (
         <SessionState
           actionTitle="Go back"
-          title="This review session is not valid."
+          title="This practice session is not valid."
           onAction={() => router.back()}
         />
       ) : null}
 
-      {interval && mode && boxDetailQuery.isLoading ? (
-        <SessionState title="Preparing review..." />
+      {collectionId && mode && collectionQuery.isLoading ? (
+        <SessionState title="Preparing practice..." />
       ) : null}
 
-      {interval && mode && boxDetailQuery.isError && !hasUnauthorizedError ? (
+      {collectionId &&
+      mode &&
+      collectionQuery.isError &&
+      !hasUnauthorizedError ? (
         <SessionState
           actionTitle="Try again"
-          title="Could not load this review box."
-          onAction={() => void boxDetailQuery.refetch()}
+          title="Could not load this collection."
+          onAction={() => void collectionQuery.refetch()}
         />
       ) : null}
 
-      {interval &&
+      {collectionId &&
       mode &&
-      !boxDetailQuery.isLoading &&
-      !boxDetailQuery.isError &&
+      !collectionQuery.isLoading &&
+      !collectionQuery.isError &&
       sessionItems?.length === 0 ? (
         <SessionState
-          actionTitle="Back to box"
-          title="No words are due now."
+          actionTitle="Back to collection"
+          title="This collection has no words to practice."
           onAction={finishSession}
         />
       ) : null}
 
       {mode === "MULTIPLE_CHOICE" && currentItem && choiceOptions.length < 2 ? (
         <SessionState
-          actionTitle="Back to box"
+          actionTitle="Back to collection"
           title="Test mode needs at least 2 different answers."
           onAction={finishSession}
         />
@@ -236,10 +251,12 @@ export function ReviewSessionScreen() {
           <View style={styles.completeIcon}>
             <Ionicons name="checkmark" size={30} color={colors.green} />
           </View>
-          <Text style={styles.completeTitle}>Review complete</Text>
+          <Text style={styles.completeTitle}>Practice complete</Text>
+          <Text style={styles.completeScore}>
+            {correctCount}/{sessionItems.length} correct
+          </Text>
           <Text style={styles.completeSubtitle}>
-            {sessionItems.length}{" "}
-            {sessionItems.length === 1 ? "word was" : "words were"} reviewed.
+            Practice answers were saved without changing word mastery.
           </Text>
           <Button title="Done" onPress={finishSession} />
         </View>
@@ -253,23 +270,22 @@ export function ReviewSessionScreen() {
 
           {answerResult === null ? (
             <ReviewSessionPrompt
-              key={currentItem.scheduleId}
+              key={currentItem.collectionWordId}
               choiceOptions={choiceOptions}
               item={currentItem}
               mode={mode}
-              onAnswer={setAnswerResult}
+              onAnswer={(result) => {
+                void recordAnswer(result);
+              }}
             />
           ) : (
-            <ReviewOutcome
-              currentInterval={currentItem.interval}
-              disabled={answerMutation.isPending}
+            <PracticeOutcome
+              disabled={scheduleMutation.isPending}
               item={currentItem}
               result={answerResult}
-              onKnown={() => {
-                void completeReview("KNOWN");
-              }}
-              onSelectInterval={(nextInterval) => {
-                void completeReview(answerResult, nextInterval);
+              onContinue={advanceToNextWord}
+              onSelectInterval={(interval) => {
+                void moveCurrentWordToReviewBox(interval);
               }}
             />
           )}
@@ -279,23 +295,21 @@ export function ReviewSessionScreen() {
   );
 }
 
-type ReviewOutcomeProps = {
-  currentInterval: ScheduledReviewInterval;
+type PracticeOutcomeProps = {
   disabled: boolean;
-  item: ScheduledReviewItem;
-  onKnown: () => void;
+  item: MasteredCollectionWord;
+  onContinue: () => void;
   onSelectInterval: (interval: ScheduledReviewInterval) => void;
-  result: ReviewAnswerResult;
+  result: PracticeAnswerResult;
 };
 
-function ReviewOutcome({
-  currentInterval,
+function PracticeOutcome({
   disabled,
   item,
-  onKnown,
+  onContinue,
   onSelectInterval,
   result,
-}: ReviewOutcomeProps) {
+}: PracticeOutcomeProps) {
   const isCorrect = result === "CORRECT";
 
   return (
@@ -324,30 +338,16 @@ function ReviewOutcome({
       <Text style={styles.outcomeSource}>{item.sourceText}</Text>
       <Text style={styles.outcomeTarget}>{item.targetText}</Text>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        style={({ pressed }) => [
-          styles.knownButton,
-          disabled ? styles.disabled : null,
-          pressed ? styles.pressed : null,
-        ]}
-        onPress={onKnown}
-      >
-        <Ionicons name="ribbon-outline" size={18} color={colors.navy} />
-        <Text style={styles.knownButtonText}>I know this</Text>
-      </Pressable>
+      <Button disabled={disabled} title="Continue" onPress={onContinue} />
 
       <View style={styles.destinationHeader}>
-        <Text style={styles.destinationTitle}>Choose the next box</Text>
+        <Text style={styles.destinationTitle}>Review this word later</Text>
         <Text style={styles.destinationSubtitle}>
-          Its timer starts when you press Start.
+          Optional. The selected box timer starts when you press Start.
         </Text>
       </View>
 
       <ReviewDestinationPicker
-        currentInterval={currentInterval}
         disabled={disabled}
         onSelect={onSelectInterval}
       />
@@ -374,13 +374,6 @@ function SessionState({ actionTitle, onAction, title }: SessionStateProps) {
 
 function getParamValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function parseScheduledReviewInterval(
-  value: string | undefined,
-): ScheduledReviewInterval | undefined {
-  return REVIEW_INTERVALS.find((item) => item.apiInterval === value)
-    ?.apiInterval;
 }
 
 const styles = StyleSheet.create({
@@ -412,24 +405,24 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.navy,
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 19,
+    lineHeight: 25,
     fontWeight: typography.weights.black,
   },
   subtitle: {
     color: colors.textMuted,
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 17,
     fontWeight: typography.weights.semibold,
     marginTop: 1,
   },
   counter: {
-    color: colors.textMuted,
+    color: colors.navy,
     fontSize: 13,
     fontWeight: typography.weights.black,
   },
   progressTrack: {
-    height: 7,
+    height: 6,
     borderRadius: radii.pill,
     backgroundColor: colors.border,
     overflow: "hidden",
@@ -446,8 +439,24 @@ const styles = StyleSheet.create({
   },
   notice: {
     color: colors.error,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: typography.weights.bold,
+    textAlign: "center",
+  },
+  stateCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    padding: spacing.xl,
+    gap: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  stateTitle: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: typography.weights.bold,
     textAlign: "center",
   },
@@ -474,71 +483,56 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF1F1",
   },
   outcomeStatusText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: typography.weights.black,
   },
   outcomeSource: {
-    color: colors.textMuted,
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: typography.weights.semibold,
+    color: colors.navy,
+    fontSize: 25,
+    lineHeight: 32,
+    fontWeight: typography.weights.black,
     textAlign: "center",
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
   },
   outcomeTarget: {
-    color: colors.navy,
-    fontSize: 27,
-    lineHeight: 34,
-    fontWeight: typography.weights.black,
+    color: colors.green,
+    fontSize: 21,
+    lineHeight: 28,
+    fontWeight: typography.weights.bold,
     textAlign: "center",
     marginTop: spacing.xs,
-    marginBottom: spacing.lg,
-  },
-  knownButton: {
-    minHeight: 46,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.backgroundSoft,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-  },
-  knownButtonText: {
-    color: colors.navy,
-    fontSize: 13,
-    fontWeight: typography.weights.black,
+    marginBottom: spacing.xl,
   },
   destinationHeader: {
     marginTop: spacing.xl,
     marginBottom: spacing.md,
   },
   destinationTitle: {
-    color: colors.text,
-    fontSize: 15,
-    lineHeight: 20,
+    color: colors.navy,
+    fontSize: 14,
+    lineHeight: 19,
     fontWeight: typography.weights.black,
   },
   destinationSubtitle: {
     color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 11,
+    lineHeight: 16,
     fontWeight: typography.weights.medium,
     marginTop: 2,
   },
   completeCard: {
     borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: "#DCECC3",
+    borderColor: colors.border,
     backgroundColor: colors.white,
     alignItems: "center",
     padding: spacing.xl,
     gap: spacing.md,
+    marginTop: spacing.xl,
   },
   completeIcon: {
-    width: 62,
-    height: 62,
+    width: 58,
+    height: 58,
     borderRadius: radii.pill,
     backgroundColor: "#F4FAE9",
     alignItems: "center",
@@ -546,37 +540,24 @@ const styles = StyleSheet.create({
   },
   completeTitle: {
     color: colors.navy,
-    fontSize: 23,
-    lineHeight: 29,
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: typography.weights.black,
+  },
+  completeScore: {
+    color: colors.green,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: typography.weights.black,
   },
   completeSubtitle: {
     color: colors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 18,
     fontWeight: typography.weights.medium,
-    textAlign: "center",
-    marginBottom: spacing.sm,
-  },
-  stateCard: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  stateTitle: {
-    color: colors.text,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: typography.weights.bold,
     textAlign: "center",
   },
   pressed: {
     opacity: 0.72,
-  },
-  disabled: {
-    opacity: 0.5,
   },
 });

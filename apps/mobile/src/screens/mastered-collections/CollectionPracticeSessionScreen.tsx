@@ -10,6 +10,7 @@ import {
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   buildPracticeChoiceOptions,
+  canStartMatchingSession,
   getPracticeSessionModeLabel,
   parsePracticeSessionMode,
   useAnswerPractice,
@@ -18,6 +19,11 @@ import {
   useScheduleUserWord,
   type ScheduledReviewInterval,
 } from "@/features/review-boxes";
+import {
+  MatchingPracticeBoard,
+  type MatchingBoardItem,
+  type MatchingBoardResult,
+} from "@/screens/practice/MatchingPracticeBoard";
 import { ReviewDestinationPicker } from "@/screens/review-boxes/ReviewDestinationPicker";
 import {
   ReviewSessionPrompt,
@@ -47,6 +53,13 @@ export function CollectionPracticeSessionScreen() {
   const [answerResult, setAnswerResult] = useState<PracticeAnswerResult | null>(
     null,
   );
+  const [matchingCompletedCount, setMatchingCompletedCount] = useState(0);
+  const [matchingComplete, setMatchingComplete] = useState(false);
+  const [matchingMissedItemIds, setMatchingMissedItemIds] = useState<
+    Set<string>
+  >(() => new Set());
+  const [isSchedulingMatchingWords, setSchedulingMatchingWords] =
+    useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const submissionInFlightRef = useRef(false);
   const hasUnauthorizedError = useAuthFailureRedirect(
@@ -62,6 +75,23 @@ export function CollectionPracticeSessionScreen() {
   }, [collectionQuery.data, sessionItems]);
 
   const currentItem = sessionItems?.[currentIndex];
+  const matchingItems = useMemo<MatchingBoardItem[]>(
+    () =>
+      sessionItems?.map((item) => ({
+        id: item.collectionWordId,
+        sourceText: item.sourceText,
+        targetText: item.targetText,
+      })) ?? [],
+    [sessionItems],
+  );
+  const canUseMatching = canStartMatchingSession(matchingItems);
+  const matchingMissedItems = useMemo(
+    () =>
+      sessionItems?.filter((item) =>
+        matchingMissedItemIds.has(item.collectionWordId),
+      ) ?? [],
+    [matchingMissedItemIds, sessionItems],
+  );
   const choiceOptions = useMemo(
     () =>
       currentItem && sessionItems
@@ -70,6 +100,7 @@ export function CollectionPracticeSessionScreen() {
     [currentIndex, currentItem, sessionItems],
   );
   const isComplete =
+    mode !== "MATCHING" &&
     sessionItems !== null &&
     sessionItems.length > 0 &&
     currentIndex >= sessionItems.length;
@@ -102,6 +133,45 @@ export function CollectionPracticeSessionScreen() {
       }
     } finally {
       submissionInFlightRef.current = false;
+    }
+  };
+
+  const recordMatchingResult = async ({
+    isCorrect,
+    itemId,
+  }: MatchingBoardResult) => {
+    const item = sessionItems?.find(
+      (sessionItem) => sessionItem.collectionWordId === itemId,
+    );
+
+    if (!item) {
+      throw new Error("Matching item not found");
+    }
+
+    setNotice(null);
+
+    try {
+      await answerMutation.mutateAsync({
+        userWordId: item.userWord.id,
+        isCorrect,
+        practiceMode: "MATCHING",
+      });
+
+      if (isCorrect) {
+        setCorrectCount((count) => count + 1);
+      } else {
+        setMatchingMissedItemIds((current) =>
+          new Set(current).add(item.collectionWordId),
+        );
+      }
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(
+          isApiError(error) ? error.message : "Could not save this match.",
+        );
+      }
+
+      throw error;
     }
   };
 
@@ -152,6 +222,38 @@ export function CollectionPracticeSessionScreen() {
     });
   };
 
+  const scheduleMatchingMissedWords = async (
+    interval: ScheduledReviewInterval,
+  ) => {
+    if (matchingMissedItems.length === 0 || isSchedulingMatchingWords) {
+      return;
+    }
+
+    setSchedulingMatchingWords(true);
+    setNotice(null);
+
+    try {
+      for (const item of matchingMissedItems) {
+        await scheduleMutation.mutateAsync({
+          userWordId: item.userWord.id,
+          interval,
+        });
+      }
+
+      finishSession();
+    } catch (error) {
+      if (!isApiError(error) || error.status !== 401) {
+        setNotice(
+          isApiError(error)
+            ? error.message
+            : "Could not schedule the missed words.",
+        );
+      }
+    } finally {
+      setSchedulingMatchingWords(false);
+    }
+  };
+
   return (
     <ScreenContainer
       backgroundColor={colors.backgroundWarm}
@@ -181,8 +283,10 @@ export function CollectionPracticeSessionScreen() {
 
         {sessionItems && sessionItems.length > 0 ? (
           <Text style={styles.counter}>
-            {Math.min(currentIndex + 1, sessionItems.length)}/
-            {sessionItems.length}
+            {mode === "MATCHING"
+              ? matchingCompletedCount
+              : Math.min(currentIndex + 1, sessionItems.length)}
+            /{sessionItems.length}
           </Text>
         ) : null}
       </View>
@@ -195,13 +299,19 @@ export function CollectionPracticeSessionScreen() {
               {
                 width: `${Math.min(
                   100,
-                  (currentIndex / sessionItems.length) * 100,
+                  ((mode === "MATCHING"
+                    ? matchingCompletedCount
+                    : currentIndex) /
+                    sessionItems.length) *
+                    100,
                 )}%`,
               },
             ]}
           />
         </View>
       ) : null}
+
+      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       {!collectionId || !mode ? (
         <SessionState
@@ -246,6 +356,14 @@ export function CollectionPracticeSessionScreen() {
         />
       ) : null}
 
+      {mode === "MATCHING" && sessionItems && !canUseMatching ? (
+        <SessionState
+          actionTitle="Back to collection"
+          title="Matching needs at least 2 words with unique word and translation texts."
+          onAction={finishSession}
+        />
+      ) : null}
+
       {isComplete && sessionItems ? (
         <View style={styles.completeCard}>
           <View style={styles.completeIcon}>
@@ -262,12 +380,40 @@ export function CollectionPracticeSessionScreen() {
         </View>
       ) : null}
 
+      {mode === "MATCHING" &&
+      sessionItems &&
+      canUseMatching &&
+      !matchingComplete ? (
+        <MatchingPracticeBoard
+          disabled={answerMutation.isPending}
+          items={matchingItems}
+          onComplete={() => setMatchingComplete(true)}
+          onProgressChange={setMatchingCompletedCount}
+          onResolve={recordMatchingResult}
+        />
+      ) : null}
+
+      {mode === "MATCHING" &&
+      sessionItems &&
+      canUseMatching &&
+      matchingComplete ? (
+        <MatchingCompletion
+          correctCount={correctCount}
+          disabled={isSchedulingMatchingWords}
+          missedCount={matchingMissedItems.length}
+          totalCount={sessionItems.length}
+          onDone={finishSession}
+          onSelectInterval={(interval) => {
+            void scheduleMatchingMissedWords(interval);
+          }}
+        />
+      ) : null}
+
       {currentItem &&
       mode &&
+      mode !== "MATCHING" &&
       !(mode === "MULTIPLE_CHOICE" && choiceOptions.length < 2) ? (
         <View style={styles.sessionBody}>
-          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-
           {answerResult === null ? (
             <ReviewSessionPrompt
               key={currentItem.collectionWordId}
@@ -292,6 +438,69 @@ export function CollectionPracticeSessionScreen() {
         </View>
       ) : null}
     </ScreenContainer>
+  );
+}
+
+type MatchingCompletionProps = {
+  correctCount: number;
+  disabled: boolean;
+  missedCount: number;
+  onDone: () => void;
+  onSelectInterval: (interval: ScheduledReviewInterval) => void;
+  totalCount: number;
+};
+
+function MatchingCompletion({
+  correctCount,
+  disabled,
+  missedCount,
+  onDone,
+  onSelectInterval,
+  totalCount,
+}: MatchingCompletionProps) {
+  return (
+    <View style={styles.completeCard}>
+      <View style={styles.completeIcon}>
+        <Ionicons name="checkmark" size={30} color={colors.green} />
+      </View>
+      <Text style={styles.completeTitle}>Matching complete</Text>
+      <Text style={styles.completeScore}>
+        {correctCount}/{totalCount} without mistakes
+      </Text>
+      <Text style={styles.completeSubtitle}>
+        {missedCount > 0
+          ? `${missedCount} ${missedCount === 1 ? "word needs" : "words need"} more practice.`
+          : "Every pair was matched on the first attempt."}
+      </Text>
+
+      {missedCount > 0 ? (
+        <View style={styles.matchingReviewBlock}>
+          <View style={styles.destinationHeader}>
+            <Text style={styles.destinationTitle}>
+              Review missed words later
+            </Text>
+            <Text style={styles.destinationSubtitle}>
+              All missed words will be added to the selected box.
+            </Text>
+          </View>
+          <ReviewDestinationPicker
+            disabled={disabled}
+            onSelect={onSelectInterval}
+          />
+          {disabled ? (
+            <Text style={styles.savingText}>Adding words...</Text>
+          ) : null}
+          <Button
+            disabled={disabled}
+            title="Finish without scheduling"
+            variant="secondary"
+            onPress={onDone}
+          />
+        </View>
+      ) : (
+        <Button title="Done" onPress={onDone} />
+      )}
+    </View>
   );
 }
 
@@ -555,6 +764,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     fontWeight: typography.weights.medium,
+    textAlign: "center",
+  },
+  matchingReviewBlock: {
+    width: "100%",
+    gap: spacing.md,
+  },
+  savingText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: typography.weights.bold,
     textAlign: "center",
   },
   pressed: {

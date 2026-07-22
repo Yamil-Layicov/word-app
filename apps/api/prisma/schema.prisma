@@ -87,6 +87,7 @@ enum PracticeMode {
   FLASHCARD
   TYPING
   MULTIPLE_CHOICE
+  MATCHING
   OTHER
 }
 

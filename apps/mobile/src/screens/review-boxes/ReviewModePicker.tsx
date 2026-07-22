@@ -5,6 +5,7 @@ import type { PracticeSessionMode } from "@/features/practice";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 
 type ReviewModePickerProps = {
+  canUseMatching: boolean;
   canUseMultipleChoice: boolean;
   onClose: () => void;
   onSelect: (mode: PracticeSessionMode) => void;
@@ -43,10 +44,12 @@ const REVIEW_MODE_OPTIONS: ReviewModeOption[] = [
     description: "Pair words and translations.",
     icon: "git-compare-outline",
     label: "Matching",
+    mode: "MATCHING",
   },
 ];
 
 export function ReviewModePicker({
+  canUseMatching,
   canUseMultipleChoice,
   onClose,
   onSelect,
@@ -87,10 +90,10 @@ export function ReviewModePicker({
 
           <View style={styles.options}>
             {REVIEW_MODE_OPTIONS.map((option) => {
-              const isComingSoon = option.mode === undefined;
               const needsMoreWords =
                 option.mode === "MULTIPLE_CHOICE" && !canUseMultipleChoice;
-              const isDisabled = isComingSoon || needsMoreWords;
+              const cannotMatch = option.mode === "MATCHING" && !canUseMatching;
+              const isDisabled = needsMoreWords || cannotMatch;
 
               return (
                 <Pressable
@@ -117,16 +120,13 @@ export function ReviewModePicker({
                     />
                   </View>
                   <View style={styles.optionText}>
-                    <View style={styles.optionTitleRow}>
-                      <Text style={styles.optionTitle}>{option.label}</Text>
-                      {isComingSoon ? (
-                        <Text style={styles.statusLabel}>Next step</Text>
-                      ) : null}
-                    </View>
+                    <Text style={styles.optionTitle}>{option.label}</Text>
                     <Text style={styles.optionDescription}>
                       {needsMoreWords
                         ? "At least 2 different answers are required."
-                        : option.description}
+                        : cannotMatch
+                          ? "At least 2 words with unique texts are required."
+                          : option.description}
                     </Text>
                   </View>
                   <Ionicons
@@ -226,11 +226,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  optionTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
   optionTitle: {
     color: colors.text,
     fontSize: 15,
@@ -243,12 +238,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: typography.weights.medium,
     marginTop: 2,
-  },
-  statusLabel: {
-    color: colors.textMuted,
-    fontSize: 10,
-    fontWeight: typography.weights.black,
-    textTransform: "uppercase",
   },
   pressed: {
     opacity: 0.72,

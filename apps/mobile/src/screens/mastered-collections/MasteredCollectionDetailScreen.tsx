@@ -12,7 +12,10 @@ import {
   useDeleteMasteredCollection,
   useRemoveMasteredCollectionWord,
 } from "@/features/mastered-collections";
-import type { PracticeSessionMode } from "@/features/practice";
+import {
+  canStartMatchingSession,
+  type PracticeSessionMode,
+} from "@/features/practice";
 import {
   getReviewIntervalByApiInterval,
   useScheduleUserWord,
@@ -297,6 +300,7 @@ export function MasteredCollectionDetailScreen() {
       />
 
       <ReviewModePicker
+        canUseMatching={canStartMatchingSession(collection?.items ?? [])}
         canUseMultipleChoice={
           new Set(collection?.items.map((item) => item.targetText)).size >= 2
         }

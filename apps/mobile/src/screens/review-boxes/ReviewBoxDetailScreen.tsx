@@ -227,6 +227,7 @@ export function ReviewBoxDetailScreen({ boxId }: ReviewBoxDetailScreenProps) {
       ) : null}
 
       <ReviewModePicker
+        canUseMatching={false}
         canUseMultipleChoice={
           new Set(groupedItems.due.map((item) => item.targetText)).size >= 2
         }

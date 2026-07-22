@@ -231,6 +231,14 @@ export function ReviewSessionScreen() {
         />
       ) : null}
 
+      {mode === "MATCHING" ? (
+        <SessionState
+          actionTitle="Back to box"
+          title="Matching for scheduled reviews will be added in the next step."
+          onAction={finishSession}
+        />
+      ) : null}
+
       {isComplete && sessionItems ? (
         <View style={styles.completeCard}>
           <View style={styles.completeIcon}>
@@ -247,6 +255,7 @@ export function ReviewSessionScreen() {
 
       {currentItem &&
       mode &&
+      mode !== "MATCHING" &&
       !(mode === "MULTIPLE_CHOICE" && choiceOptions.length < 2) ? (
         <View style={styles.sessionBody}>
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}

@@ -503,7 +503,7 @@ describe('PracticeController (e2e)', () => {
       .send({
         userWordId: vocabularyItem.userWord.id,
         isCorrect: true,
-        practiceMode: PracticeMode.FLASHCARD,
+        practiceMode: PracticeMode.MATCHING,
       })
       .expect(201);
 
@@ -512,7 +512,7 @@ describe('PracticeController (e2e)', () => {
 
     expect(body.userWordId).toBe(vocabularyItem.userWord.id);
     expect(body.vocabularyItemId).toBe(vocabularyItem.id);
-    expect(body.practiceLog.practiceMode).toBe(PracticeMode.FLASHCARD);
+    expect(body.practiceLog.practiceMode).toBe(PracticeMode.MATCHING);
     expect(body.practiceLog.isCorrect).toBe(true);
 
     expect(afterState.status).toBe(beforeState.status);
@@ -541,7 +541,7 @@ describe('PracticeController (e2e)', () => {
       id: body.practiceLog.id,
       userWordId: vocabularyItem.userWord.id,
       vocabularyItemId: vocabularyItem.id,
-      practiceMode: PracticeMode.FLASHCARD,
+      practiceMode: PracticeMode.MATCHING,
       isCorrect: true,
     });
   });

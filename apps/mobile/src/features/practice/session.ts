@@ -6,6 +6,7 @@ const PRACTICE_SESSION_MODES: PracticeSessionMode[] = [
   "FLASHCARD",
   "TYPING",
   "MULTIPLE_CHOICE",
+  "MATCHING",
 ];
 
 export function parsePracticeSessionMode(
@@ -22,7 +23,26 @@ export function getPracticeSessionModeLabel(mode: PracticeSessionMode) {
       return "Writing";
     case "MULTIPLE_CHOICE":
       return "Test";
+    case "MATCHING":
+      return "Matching";
   }
+}
+
+export function canStartMatchingSession<
+  TItem extends { sourceText: string; targetText: string },
+>(items: TItem[]) {
+  if (items.length < 2) {
+    return false;
+  }
+
+  const sourceTexts = new Set(
+    items.map((item) => normalizeMatchingText(item.sourceText)),
+  );
+  const targetTexts = new Set(
+    items.map((item) => normalizeMatchingText(item.targetText)),
+  );
+
+  return sourceTexts.size === items.length && targetTexts.size === items.length;
 }
 
 export function buildPracticeChoiceOptions<
@@ -46,4 +66,12 @@ export function buildPracticeChoiceOptions<
   const shift = currentIndex % options.length;
 
   return [...options.slice(shift), ...options.slice(0, shift)];
+}
+
+function normalizeMatchingText(value: string) {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
 }

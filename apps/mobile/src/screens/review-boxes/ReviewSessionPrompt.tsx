@@ -6,6 +6,7 @@ import type { PracticeSessionMode } from "@/features/practice";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 
 export type PracticeAnswerResult = "CORRECT" | "INCORRECT";
+export type PromptPracticeMode = Exclude<PracticeSessionMode, "MATCHING">;
 
 type PracticePromptItem = {
   sourceText: string;
@@ -15,7 +16,7 @@ type PracticePromptItem = {
 type ReviewSessionPromptProps = {
   choiceOptions: string[];
   item: PracticePromptItem;
-  mode: PracticeSessionMode;
+  mode: PromptPracticeMode;
   onAnswer: (result: PracticeAnswerResult) => void;
 };
 

@@ -5,7 +5,12 @@ import type {
   WordType,
 } from "@/entities/vocabulary-item";
 
-export type PracticeMode = "FLASHCARD" | "TYPING" | "MULTIPLE_CHOICE" | "OTHER";
+export type PracticeMode =
+  | "FLASHCARD"
+  | "TYPING"
+  | "MULTIPLE_CHOICE"
+  | "MATCHING"
+  | "OTHER";
 
 export type PracticeExample = {
   id: string;

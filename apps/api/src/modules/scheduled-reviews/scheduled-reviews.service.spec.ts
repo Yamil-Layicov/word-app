@@ -190,6 +190,27 @@ describe('ScheduledReviewsService', () => {
     );
   });
 
+  it('stores matching results through the scheduled review flow', async () => {
+    await service.answerSchedule(currentUser, 'schedule-1', {
+      practiceMode: PracticeMode.MATCHING,
+      result: ScheduledReviewAnswerResult.CORRECT,
+      nextInterval: ScheduledReviewInterval.THREE_DAYS,
+    });
+
+    expect(answerDueScheduleMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        answerResult: ScheduledReviewAnswerResult.CORRECT,
+        practiceMode: PracticeMode.MATCHING,
+        isCorrect: true,
+        nextMasteryStep: 3,
+        nextStatus: UserWordStatus.REVIEWING,
+        nextSchedule: {
+          interval: ScheduledReviewInterval.THREE_DAYS,
+        },
+      }),
+    );
+  });
+
   it('marks a known word as mastered without creating another schedule', async () => {
     await service.answerSchedule(currentUser, 'schedule-1', {
       practiceMode: PracticeMode.MULTIPLE_CHOICE,

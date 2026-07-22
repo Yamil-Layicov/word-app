@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuthFailureRedirect } from "@/features/auth";
 import {
   buildPracticeChoiceOptions,
+  canStartMatchingSession,
   getPracticeSessionModeLabel,
   parsePracticeSessionMode,
 } from "@/features/practice";
@@ -23,6 +24,11 @@ import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
+import {
+  MatchingPracticeBoard,
+  type MatchingBoardItem,
+  type MatchingBoardResult,
+} from "@/screens/practice/MatchingPracticeBoard";
 import { ReviewDestinationPicker } from "./ReviewDestinationPicker";
 import {
   ReviewSessionPrompt,
@@ -46,7 +52,10 @@ export function ReviewSessionScreen() {
   const [answerResult, setAnswerResult] = useState<ReviewAnswerResult | null>(
     null,
   );
+  const [matchingCompletedCount, setMatchingCompletedCount] = useState(0);
+  const [matchingComplete, setMatchingComplete] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const matchingResultsRef = useRef<Map<string, ReviewAnswerResult>>(new Map());
   const submissionInFlightRef = useRef(false);
 
   const boxDetailQuery = useScheduledReviewBoxDetailQuery(interval);
@@ -69,6 +78,19 @@ export function ReviewSessionScreen() {
   }, [boxDetailQuery.data, sessionItems]);
 
   const currentItem = sessionItems?.[currentIndex];
+  const matchingItems = useMemo<MatchingBoardItem[]>(
+    () =>
+      sessionItems?.map((item) => ({
+        id: item.scheduleId,
+        sourceText: item.sourceText,
+        targetText: item.targetText,
+      })) ?? [],
+    [sessionItems],
+  );
+  const canUseMatching = canStartMatchingSession(matchingItems);
+  const matchingAnswerResult = currentItem
+    ? matchingResultsRef.current.get(currentItem.scheduleId)
+    : undefined;
   const choiceOptions = useMemo(
     () =>
       currentItem && sessionItems
@@ -82,7 +104,40 @@ export function ReviewSessionScreen() {
   const isComplete =
     sessionItems !== null &&
     sessionItems.length > 0 &&
-    currentIndex >= sessionItems.length;
+    currentIndex >= sessionItems.length &&
+    (mode !== "MATCHING" || matchingComplete);
+  const completedStepCount =
+    mode === "MATCHING"
+      ? matchingCompletedCount + (matchingComplete ? currentIndex : 0)
+      : currentIndex;
+  const totalStepCount =
+    (sessionItems?.length ?? 0) * (mode === "MATCHING" ? 2 : 1);
+
+  const recordMatchingResult = ({
+    isCorrect,
+    itemId,
+  }: MatchingBoardResult): Promise<void> => {
+    if (!sessionItems?.some((item) => item.scheduleId === itemId)) {
+      return Promise.reject(new Error("Scheduled matching item not found"));
+    }
+
+    matchingResultsRef.current.set(itemId, isCorrect ? "CORRECT" : "INCORRECT");
+
+    return Promise.resolve();
+  };
+
+  const completeMatchingBoard = () => {
+    if (
+      !sessionItems ||
+      matchingResultsRef.current.size !== sessionItems.length
+    ) {
+      setNotice("Could not prepare the matching results. Please try again.");
+      return;
+    }
+
+    setCurrentIndex(0);
+    setMatchingComplete(true);
+  };
 
   const completeReview = async (
     result: ScheduledReviewAnswerResult,
@@ -163,14 +218,26 @@ export function ReviewSessionScreen() {
             {intervalLabel ? `${intervalLabel} review` : "Review"}
           </Text>
           <Text style={styles.subtitle}>
-            {mode ? getPracticeSessionModeLabel(mode) : "Choose a valid mode"}
+            {mode
+              ? `${getPracticeSessionModeLabel(mode)}${
+                  mode === "MATCHING"
+                    ? matchingComplete
+                      ? " - Choose next boxes"
+                      : " - Pair words"
+                    : ""
+                }`
+              : "Choose a valid mode"}
           </Text>
         </View>
 
         {sessionItems && sessionItems.length > 0 ? (
           <Text style={styles.counter}>
-            {Math.min(currentIndex + 1, sessionItems.length)}/
-            {sessionItems.length}
+            {mode === "MATCHING"
+              ? matchingComplete
+                ? Math.min(currentIndex + 1, sessionItems.length)
+                : matchingCompletedCount
+              : Math.min(currentIndex + 1, sessionItems.length)}
+            /{sessionItems.length}
           </Text>
         ) : null}
       </View>
@@ -183,7 +250,9 @@ export function ReviewSessionScreen() {
               {
                 width: `${Math.min(
                   100,
-                  (currentIndex / sessionItems.length) * 100,
+                  totalStepCount > 0
+                    ? (completedStepCount / totalStepCount) * 100
+                    : 0,
                 )}%`,
               },
             ]}
@@ -231,13 +300,18 @@ export function ReviewSessionScreen() {
         />
       ) : null}
 
-      {mode === "MATCHING" ? (
+      {mode === "MATCHING" &&
+      sessionItems &&
+      sessionItems.length > 0 &&
+      !canUseMatching ? (
         <SessionState
           actionTitle="Back to box"
-          title="Matching for scheduled reviews will be added in the next step."
+          title="Matching needs at least 2 words with unique word and translation texts."
           onAction={finishSession}
         />
       ) : null}
+
+      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       {isComplete && sessionItems ? (
         <View style={styles.completeCard}>
@@ -253,13 +327,54 @@ export function ReviewSessionScreen() {
         </View>
       ) : null}
 
+      {mode === "MATCHING" &&
+      sessionItems &&
+      canUseMatching &&
+      !matchingComplete ? (
+        <MatchingPracticeBoard
+          items={matchingItems}
+          onComplete={completeMatchingBoard}
+          onProgressChange={setMatchingCompletedCount}
+          onResolve={recordMatchingResult}
+        />
+      ) : null}
+
+      {mode === "MATCHING" &&
+      matchingComplete &&
+      currentItem &&
+      matchingAnswerResult ? (
+        <View style={styles.sessionBody}>
+          <ReviewOutcome
+            currentInterval={currentItem.interval}
+            disabled={answerMutation.isPending}
+            item={currentItem}
+            result={matchingAnswerResult}
+            onKnown={() => {
+              void completeReview("KNOWN");
+            }}
+            onSelectInterval={(nextInterval) => {
+              void completeReview(matchingAnswerResult, nextInterval);
+            }}
+          />
+        </View>
+      ) : null}
+
+      {mode === "MATCHING" &&
+      matchingComplete &&
+      currentItem &&
+      !matchingAnswerResult ? (
+        <SessionState
+          actionTitle="Back to box"
+          title="Could not prepare this word result."
+          onAction={finishSession}
+        />
+      ) : null}
+
       {currentItem &&
       mode &&
       mode !== "MATCHING" &&
       !(mode === "MULTIPLE_CHOICE" && choiceOptions.length < 2) ? (
         <View style={styles.sessionBody}>
-          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-
           {answerResult === null ? (
             <ReviewSessionPrompt
               key={currentItem.scheduleId}

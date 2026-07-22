@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { VocabularyItem } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
+import { canStartMatchingSession } from "@/features/practice";
 import {
   REVIEW_INTERVALS,
   getReviewIntervalByApiInterval,
@@ -227,7 +228,7 @@ export function ReviewBoxDetailScreen({ boxId }: ReviewBoxDetailScreenProps) {
       ) : null}
 
       <ReviewModePicker
-        canUseMatching={false}
+        canUseMatching={canStartMatchingSession(groupedItems.due)}
         canUseMultipleChoice={
           new Set(groupedItems.due.map((item) => item.targetText)).size >= 2
         }

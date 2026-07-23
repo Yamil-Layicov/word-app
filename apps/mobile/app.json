@@ -27,6 +27,14 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
+      [
+        "expo-notifications",
+        {
+          "color": "#FF641F",
+          "defaultChannel": "review-reminders"
+        }
+      ],
       [
         "expo-splash-screen",
         {

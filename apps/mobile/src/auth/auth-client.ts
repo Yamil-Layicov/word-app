@@ -13,6 +13,10 @@ export const authClient = {
     return baseClient.post<TResponse>(path, body, withAuthorization(options));
   },
 
+  put<TResponse>(path: string, body?: unknown, options?: WriteOptions) {
+    return baseClient.put<TResponse>(path, body, withAuthorization(options));
+  },
+
   patch<TResponse>(path: string, body?: unknown, options?: WriteOptions) {
     return baseClient.patch<TResponse>(path, body, withAuthorization(options));
   },
@@ -22,9 +26,9 @@ export const authClient = {
   },
 };
 
-function withAuthorization<TOptions extends { headers?: HeadersInit } | undefined>(
-  options: TOptions,
-) {
+function withAuthorization<
+  TOptions extends { headers?: HeadersInit } | undefined,
+>(options: TOptions) {
   const accessToken = getAccessToken();
 
   if (!accessToken) {

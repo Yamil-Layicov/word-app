@@ -29,12 +29,27 @@ async function request<TResponse>(
 }
 
 export const baseClient = {
-  get<TResponse>(path: string, options?: Omit<ApiRequestOptions, "body" | "method">) {
+  get<TResponse>(
+    path: string,
+    options?: Omit<ApiRequestOptions, "body" | "method">,
+  ) {
     return request<TResponse>(path, { ...options, method: "GET" });
   },
 
-  post<TResponse>(path: string, body?: unknown, options?: Omit<ApiRequestOptions, "body" | "method">) {
+  post<TResponse>(
+    path: string,
+    body?: unknown,
+    options?: Omit<ApiRequestOptions, "body" | "method">,
+  ) {
     return request<TResponse>(path, { ...options, method: "POST", body });
+  },
+
+  put<TResponse>(
+    path: string,
+    body?: unknown,
+    options?: Omit<ApiRequestOptions, "body" | "method">,
+  ) {
+    return request<TResponse>(path, { ...options, method: "PUT", body });
   },
 
   patch<TResponse>(
@@ -45,7 +60,10 @@ export const baseClient = {
     return request<TResponse>(path, { ...options, method: "PATCH", body });
   },
 
-  delete<TResponse>(path: string, options?: Omit<ApiRequestOptions, "body" | "method">) {
+  delete<TResponse>(
+    path: string,
+    options?: Omit<ApiRequestOptions, "body" | "method">,
+  ) {
     return request<TResponse>(path, { ...options, method: "DELETE" });
   },
 
@@ -53,7 +71,9 @@ export const baseClient = {
 };
 
 function buildUrl(path: string, query?: QueryParams) {
-  const baseUrl = path.startsWith("http") ? path : `${env.apiUrl}${path.startsWith("/") ? path : `/${path}`}`;
+  const baseUrl = path.startsWith("http")
+    ? path
+    : `${env.apiUrl}${path.startsWith("/") ? path : `/${path}`}`;
   const searchParams = new URLSearchParams();
 
   Object.entries(query ?? {}).forEach(([key, value]) => {

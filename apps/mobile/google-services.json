@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "610101175797",
+    "project_id": "word-app-e8b58",
+    "storage_bucket": "word-app-e8b58.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:610101175797:android:f60a90754ef3ffe1452cbc",
+        "android_client_info": {
+          "package_name": "com.yamillayicov.wordapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAx3bNYGB2Htk5mcTI5H2XvDUSNAWmDqDc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

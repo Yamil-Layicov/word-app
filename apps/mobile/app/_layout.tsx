@@ -4,7 +4,10 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { configureNotificationHandler } from "@/features/push-notifications";
 import { queryClient } from "@/shared/lib/query-client";
+
+configureNotificationHandler();
 
 export default function RootLayout() {
   return (

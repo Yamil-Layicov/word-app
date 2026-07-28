@@ -169,6 +169,17 @@ export function getReviewIntervalByLabel(label: ReviewIntervalLabel) {
   return REVIEW_INTERVALS.find((item) => item.label === label);
 }
 
+export function parseScheduledReviewInterval(
+  value: unknown,
+): ScheduledReviewInterval | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  return REVIEW_INTERVALS.find((item) => item.apiInterval === value)
+    ?.apiInterval;
+}
+
 export function isScheduledReviewItemDue(
   item: ScheduledReviewItem,
   nowMs: number,

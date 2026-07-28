@@ -7,9 +7,9 @@ import type { VocabularyItem } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
 import { canStartMatchingSession } from "@/features/practice";
 import {
-  REVIEW_INTERVALS,
   getReviewIntervalByApiInterval,
   isScheduledReviewItemDue,
+  parseScheduledReviewInterval,
   useCancelScheduledReview,
   useScheduleUserWord,
   useScheduledReviewBoxDetailQuery,
@@ -354,13 +354,6 @@ function toVocabularyItem(item: ScheduledReviewItem): VocabularyItem {
 
 function getIntervalLabel(interval: ScheduledReviewInterval): string {
   return getReviewIntervalByApiInterval(interval)?.label ?? interval;
-}
-
-function parseScheduledReviewInterval(
-  value: string | undefined,
-): ScheduledReviewInterval | undefined {
-  return REVIEW_INTERVALS.find((item) => item.apiInterval === value)
-    ?.apiInterval;
 }
 
 const styles = StyleSheet.create({

@@ -13,6 +13,7 @@ import {
   useRegister,
   useStartSession,
 } from "@/features/auth";
+import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
@@ -63,7 +64,7 @@ export function LanguagePairSelectionScreen() {
 
       startSession(response);
       clearRegisterDraft();
-      router.replace("/(app)");
+      router.replace(consumePendingNotificationDestination() ?? "/(app)");
     } catch (error) {
       setNotice(isApiError(error) ? error.message : "Could not create your account.");
     }

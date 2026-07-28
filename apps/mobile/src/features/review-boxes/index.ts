@@ -18,6 +18,7 @@ export {
   getReviewIntervalByApiInterval,
   getReviewIntervalByLabel,
   isScheduledReviewItemDue,
+  parseScheduledReviewInterval,
 } from "./model";
 export { scheduledReviewQueryKeys } from "./query-keys";
 export {

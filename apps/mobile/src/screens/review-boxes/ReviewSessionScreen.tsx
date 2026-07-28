@@ -11,9 +11,9 @@ import {
   parsePracticeSessionMode,
 } from "@/features/practice";
 import {
-  REVIEW_INTERVALS,
   getReviewIntervalByApiInterval,
   isScheduledReviewItemDue,
+  parseScheduledReviewInterval,
   useAnswerScheduledReview,
   useScheduledReviewBoxDetailQuery,
   type ScheduledReviewAnswerResult,
@@ -498,13 +498,6 @@ function SessionState({ actionTitle, onAction, title }: SessionStateProps) {
 
 function getParamValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function parseScheduledReviewInterval(
-  value: string | undefined,
-): ScheduledReviewInterval | undefined {
-  return REVIEW_INTERVALS.find((item) => item.apiInterval === value)
-    ?.apiInterval;
 }
 
 const styles = StyleSheet.create({

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useLogin, useStartSession } from "@/features/auth";
+import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { isApiError } from "@/shared/api/http-error";
 import { AuthScreenScaffold } from "@/shared/layout/AuthScreenScaffold";
 import { colors, spacing, typography } from "@/shared/theme";
@@ -53,7 +54,9 @@ export function LoginScreen() {
         });
 
         startSession(response);
-        router.replace("/(app)");
+        router.replace(
+          consumePendingNotificationDestination() ?? "/(app)",
+        );
       } catch (error) {
         setNoticeType("error");
         setNotice(isApiError(error) ? error.message : "Could not log in.");

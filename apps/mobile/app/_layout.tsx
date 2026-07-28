@@ -4,7 +4,10 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { configureNotificationHandler } from "@/features/push-notifications";
+import {
+  configureNotificationHandler,
+  NotificationNavigationObserver,
+} from "@/features/push-notifications";
 import { queryClient } from "@/shared/lib/query-client";
 
 configureNotificationHandler();
@@ -14,6 +17,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
+          <NotificationNavigationObserver />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="(auth)" />

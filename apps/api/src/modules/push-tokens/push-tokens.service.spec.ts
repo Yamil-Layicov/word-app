@@ -19,15 +19,18 @@ const registerDto = {
 describe('PushTokensService', () => {
   let repository: jest.Mocked<PushTokensRepository>;
   let findUserStatusMock: jest.Mock;
+  let findEnabledTokensByUserIdMock: jest.Mock;
   let registerMock: jest.Mock;
   let service: PushTokensService;
 
   beforeEach(() => {
     findUserStatusMock = jest.fn().mockResolvedValue(UserStatus.ACTIVE);
+    findEnabledTokensByUserIdMock = jest.fn().mockResolvedValue([]);
     registerMock = jest.fn().mockResolvedValue(undefined);
 
     repository = {
       findUserStatus: findUserStatusMock,
+      findEnabledTokensByUserId: findEnabledTokensByUserIdMock,
       register: registerMock,
     } as unknown as jest.Mocked<PushTokensRepository>;
 
@@ -60,5 +63,16 @@ describe('PushTokensService', () => {
       'Account is not active',
     );
     expect(registerMock).not.toHaveBeenCalled();
+  });
+
+  it('returns enabled tokens for an internal notification sender', async () => {
+    findEnabledTokensByUserIdMock.mockResolvedValue([
+      'ExponentPushToken[device-1]',
+    ]);
+
+    await expect(
+      service.getEnabledTokensForUser(currentUser.id),
+    ).resolves.toEqual(['ExponentPushToken[device-1]']);
+    expect(findEnabledTokensByUserIdMock).toHaveBeenCalledWith(currentUser.id);
   });
 });

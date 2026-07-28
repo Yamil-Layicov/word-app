@@ -42,4 +42,18 @@ export class PushTokensRepository {
       },
     });
   }
+
+  async findEnabledTokensByUserId(userId: string): Promise<string[]> {
+    const devices = await this.prisma.pushDeviceToken.findMany({
+      where: {
+        userId,
+        isEnabled: true,
+      },
+      select: {
+        token: true,
+      },
+    });
+
+    return devices.map((device) => device.token);
+  }
 }

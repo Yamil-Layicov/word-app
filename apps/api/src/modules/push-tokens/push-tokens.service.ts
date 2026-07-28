@@ -34,4 +34,8 @@ export class PushTokensService {
       platform: dto.platform,
     });
   }
+
+  getEnabledTokensForUser(userId: string): Promise<string[]> {
+    return this.pushTokensRepository.findEnabledTokensByUserId(userId);
+  }
 }

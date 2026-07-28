@@ -16,6 +16,7 @@ import { ScheduledReviewsModule } from './modules/scheduled-reviews/scheduled-re
 import { VocabularyModule } from './modules/vocabulary/vocabulary.module';
 import { PracticeModule } from './modules/practice/practice.module';
 import { PushTokensModule } from './modules/push-tokens/push-tokens.module';
+import { PushNotificationsModule } from './modules/push-notifications/push-notifications.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PushTokensModule } from './modules/push-tokens/push-tokens.module';
     ScheduledReviewsModule,
     PracticeModule,
     PushTokensModule,
+    PushNotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

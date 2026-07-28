@@ -8,5 +8,6 @@ import { PushTokensService } from './push-tokens.service';
   imports: [AuthModule],
   controllers: [PushTokensController],
   providers: [PushTokensService, PushTokensRepository],
+  exports: [PushTokensService],
 })
 export class PushTokensModule {}

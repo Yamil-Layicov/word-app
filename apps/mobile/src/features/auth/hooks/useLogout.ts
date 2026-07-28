@@ -1,11 +1,5 @@
-import { useCallback } from "react";
-
-import { clearAccessToken } from "@/auth";
-import { queryClient } from "@/shared/lib/query-client";
+import { useAuthSession } from "../AuthSessionProvider";
 
 export function useLogout() {
-  return useCallback(() => {
-    clearAccessToken();
-    queryClient.clear();
-  }, []);
+  return useAuthSession().endSession;
 }

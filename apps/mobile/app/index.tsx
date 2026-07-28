@@ -1,5 +1,9 @@
 import { Redirect } from "expo-router";
 
+import { useAuthSession } from "@/features/auth";
+
 export default function IndexRoute() {
-  return <Redirect href="/login" />;
+  const { status } = useAuthSession();
+
+  return <Redirect href={status === "authenticated" ? "/(app)" : "/login"} />;
 }

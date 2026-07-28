@@ -1,4 +1,9 @@
-export { getCurrentUser, login, register } from "./api";
+export { getCurrentUser, login, logoutSession, refreshSession, register } from "./api";
+export {
+  AuthSessionProvider,
+  type AuthSessionStatus,
+  useAuthSession,
+} from "./AuthSessionProvider";
 export { authQueryKeys } from "./query-keys";
 export { useLogin } from "./hooks/useLogin";
 export { useLogout } from "./hooks/useLogout";
@@ -20,6 +25,7 @@ export type {
   AuthUser,
   AuthUserProfile,
   LoginRequest,
+  RefreshTokenRequest,
   RegisterRequest,
   UserRole,
   UserStatus,

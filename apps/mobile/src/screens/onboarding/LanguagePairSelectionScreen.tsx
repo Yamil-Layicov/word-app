@@ -62,7 +62,7 @@ export function LanguagePairSelectionScreen() {
         languagePairId: nextDraft.languagePairId,
       });
 
-      startSession(response);
+      await startSession(response);
       clearRegisterDraft();
       router.replace(consumePendingNotificationDestination() ?? "/(app)");
     } catch (error) {

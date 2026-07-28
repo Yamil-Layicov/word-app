@@ -1,12 +1,14 @@
 import { Redirect, Stack } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
-import { getAccessToken } from "@/auth";
+import { useAuthSession } from "@/features/auth";
 import { AppBottomNav } from "@/shared/navigation/AppBottomNav";
 import { colors } from "@/shared/theme";
 
 export default function AppLayout() {
-  if (!getAccessToken()) {
+  const { status } = useAuthSession();
+
+  if (status !== "authenticated") {
     return <Redirect href="/login" />;
   }
 

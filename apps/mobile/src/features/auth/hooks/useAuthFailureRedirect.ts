@@ -11,7 +11,7 @@ export function useAuthFailureRedirect(error: unknown) {
 
   useEffect(() => {
     if (isUnauthorized) {
-      logout();
+      void logout({ revokeServerSession: false });
       router.replace("/login");
     }
   }, [isUnauthorized, logout, router]);

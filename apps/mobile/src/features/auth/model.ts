@@ -24,6 +24,10 @@ export type AuthTokensResponse = {
   user: AuthUser;
 };
 
+export type RefreshTokenRequest = {
+  refreshToken: string;
+};
+
 export type RegisterRequest = {
   email: string;
   password: string;

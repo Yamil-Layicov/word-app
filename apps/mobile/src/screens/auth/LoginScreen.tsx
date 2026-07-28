@@ -53,7 +53,7 @@ export function LoginScreen() {
           password,
         });
 
-        startSession(response);
+        await startSession(response);
         router.replace(
           consumePendingNotificationDestination() ?? "/(app)",
         );

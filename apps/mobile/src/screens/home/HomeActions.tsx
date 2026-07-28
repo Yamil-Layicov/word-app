@@ -22,8 +22,8 @@ export function HomeActions() {
   const logout = useLogout();
   const router = useRouter();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace("/login");
   };
 
@@ -38,7 +38,12 @@ export function HomeActions() {
           onPress={() => router.push(action.href)}
         />
       ))}
-      <Button title="Log out" variant="secondary" style={styles.logoutButton} onPress={handleLogout} />
+      <Button
+        title="Log out"
+        variant="secondary"
+        style={styles.logoutButton}
+        onPress={() => void handleLogout()}
+      />
     </View>
   );
 }

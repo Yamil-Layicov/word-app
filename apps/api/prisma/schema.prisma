@@ -328,18 +328,23 @@ model DeckCard {
 }
 
 model UserWordSchedule {
-  id           String                       @id @default(cuid())
-  userId       String
-  userWordId   String
-  state        ScheduledReviewState         @default(QUEUED)
-  interval     ScheduledReviewInterval
-  answerResult ScheduledReviewAnswerResult?
-  startedAt    DateTime?
-  dueAt        DateTime?
-  completedAt  DateTime?
-  cancelledAt  DateTime?
-  createdAt    DateTime                     @default(now())
-  updatedAt    DateTime                     @updatedAt
+  id                       String                       @id @default(cuid())
+  userId                   String
+  userWordId               String
+  state                    ScheduledReviewState         @default(QUEUED)
+  interval                 ScheduledReviewInterval
+  answerResult             ScheduledReviewAnswerResult?
+  startedAt                DateTime?
+  dueAt                    DateTime?
+  completedAt              DateTime?
+  cancelledAt              DateTime?
+  dueNotificationClaimId   String?
+  dueNotificationClaimedAt DateTime?
+  dueNotificationSentAt    DateTime?
+  dueNotificationAttempts  Int                          @default(0)
+  dueNotificationLastError String?
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userWord UserWord @relation(fields: [userWordId], references: [id], onDelete: Cascade)
@@ -349,6 +354,7 @@ model UserWordSchedule {
   @@index([state])
   @@index([dueAt])
   @@index([userId, state, dueAt])
+  @@index([state, dueNotificationSentAt, dueAt], map: "UserWordSchedule_due_notification_scan_idx")
 }
 
 model ReviewLog {

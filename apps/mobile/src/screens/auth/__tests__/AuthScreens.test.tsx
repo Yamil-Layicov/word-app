@@ -7,7 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
   saveRegisterDraft,
@@ -21,6 +21,7 @@ import { RegisterScreen } from "../RegisterScreen";
 
 jest.mock("expo-router", () => ({
   Link: ({ children }: PropsWithChildren) => children,
+  useLocalSearchParams: jest.fn(),
   useRouter: jest.fn(),
 }));
 
@@ -29,6 +30,7 @@ jest.mock("@expo/vector-icons", () => ({
 }));
 
 jest.mock("@/features/auth", () => ({
+  ...jest.requireActual("@/features/auth/auth-route-notice"),
   ...jest.requireActual("@/features/auth/form-validation"),
   saveRegisterDraft: jest.fn(),
   useLogin: jest.fn(),
@@ -40,6 +42,7 @@ jest.mock("@/features/push-notifications", () => ({
 }));
 
 const useRouterMock = useRouter as jest.Mock;
+const useLocalSearchParamsMock = useLocalSearchParams as jest.Mock;
 const useLoginMock = useLogin as jest.Mock;
 const useStartSessionMock = useStartSession as jest.Mock;
 const saveRegisterDraftMock = saveRegisterDraft as jest.Mock;
@@ -69,7 +72,10 @@ const authResponse: AuthTokensResponse = {
 describe("LoginScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    login.mockReset();
+    startSession.mockReset();
     useRouterMock.mockReturnValue(router);
+    useLocalSearchParamsMock.mockReturnValue({});
     useLoginMock.mockReturnValue({
       mutateAsync: login,
       isPending: false,
@@ -113,11 +119,25 @@ describe("LoginScreen", () => {
       expect(router.replace).toHaveBeenCalledWith("/(app)");
     });
   });
+
+  it("shows the account-created notice passed by onboarding", () => {
+    useLocalSearchParamsMock.mockReturnValue({
+      notice: "account-created",
+    });
+
+    render(<LoginScreen />);
+
+    expect(
+      screen.getByText("Your account was created. Log in to continue."),
+    ).toBeTruthy();
+  });
 });
 
 describe("RegisterScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    login.mockReset();
+    startSession.mockReset();
     useRouterMock.mockReturnValue(router);
   });
 

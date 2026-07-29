@@ -6,12 +6,14 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
 import {
+  AUTH_ROUTE_NOTICE,
   buildRegisterRequest,
   clearRegisterDraft,
   getRegisterDraft,
   saveRegisterLanguagePair,
   useRegister,
   useStartSession,
+  type AuthTokensResponse,
 } from "@/features/auth";
 import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { isApiError } from "@/shared/api/http-error";
@@ -55,14 +57,27 @@ export function LanguagePairSelectionScreen() {
 
     setNotice(null);
 
-    try {
-      const response = await registerMutation.mutateAsync(registerRequest);
+    let response: AuthTokensResponse;
 
-      await startSession(response);
-      clearRegisterDraft();
-      router.replace(consumePendingNotificationDestination() ?? "/(app)");
+    try {
+      response = await registerMutation.mutateAsync(registerRequest);
     } catch (error) {
       setNotice(isApiError(error) ? error.message : "Could not create your account.");
+      return;
+    }
+
+    clearRegisterDraft();
+
+    try {
+      await startSession(response);
+      router.replace(consumePendingNotificationDestination() ?? "/(app)");
+    } catch {
+      router.replace({
+        pathname: "/login",
+        params: {
+          notice: AUTH_ROUTE_NOTICE.accountCreated,
+        },
+      });
     }
   };
 

@@ -1,4 +1,4 @@
-import { Link, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -6,6 +6,7 @@ import {
   useLogin,
   useStartSession,
   validateLoginForm,
+  getAuthRouteNoticeMessage,
   type LoginFormErrors,
 } from "@/features/auth";
 import { consumePendingNotificationDestination } from "@/features/push-notifications";
@@ -16,12 +17,17 @@ import { Button, PasswordField, TextField } from "@/shared/ui";
 
 export function LoginScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    notice?: string | string[];
+  }>();
   const loginMutation = useLogin();
   const startSession = useStartSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<LoginFormErrors>({});
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(() =>
+    getAuthRouteNoticeMessage(params.notice),
+  );
   const [noticeType, setNoticeType] = useState<"info" | "error">("info");
 
   const handleSubmit = async () => {

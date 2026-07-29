@@ -1,5 +1,9 @@
 export { getCurrentUser, login, logoutSession, refreshSession, register } from "./api";
 export {
+  AUTH_ROUTE_NOTICE,
+  getAuthRouteNoticeMessage,
+} from "./auth-route-notice";
+export {
   AuthSessionProvider,
   type AuthSessionStatus,
   useAuthSession,

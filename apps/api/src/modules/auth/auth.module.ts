@@ -21,9 +21,10 @@ import { PasswordResetRepository } from './password-reset.repository';
 import { PasswordResetService } from './password-reset.service';
 import { PasswordResetTokenService } from './password-reset-token.service';
 import { PasswordService } from './password.service';
+import { AuthRateLimitModule } from './rate-limit/auth-rate-limit.module';
 
 @Module({
-  imports: [JwtModule.register({})],
+  imports: [JwtModule.register({}), AuthRateLimitModule],
   controllers: [AuthController],
   providers: [
     AuthService,

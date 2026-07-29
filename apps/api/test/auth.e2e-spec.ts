@@ -11,11 +11,11 @@
  * Bu versiyada response helper-lər `test/helpers/response.helpers.ts` faylından import olunur.
  * Məqsəd eyni helper-ləri hər test faylında təkrar yazmamaqdır.
  */
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
 import { createHash } from 'crypto';
 import request from 'supertest';
-import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import {
@@ -39,6 +39,10 @@ import {
   PASSWORD_RESET_REQUEST_MESSAGE,
   PASSWORD_RESET_SUCCESS_MESSAGE,
 } from '../src/modules/auth/password-reset.service';
+import {
+  AUTH_RATE_LIMIT_ERROR_CODE,
+  AUTH_RATE_LIMIT_ERROR_MESSAGE,
+} from '../src/modules/auth/rate-limit/auth-rate-limit.constants';
 import {
   expectAuthResponseBody,
   expectObject,
@@ -72,7 +76,7 @@ function expectMeResponseBody(value: unknown): MeResponseBody {
 }
 
 describe('AuthController (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: NestExpressApplication;
   let prisma: PrismaService;
 
   let languagePairId: string;
@@ -225,7 +229,8 @@ describe('AuthController (e2e)', () => {
       .useValue(passwordResetEmailGateway)
       .compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
+    app.set('trust proxy', 'loopback');
 
     app.useGlobalPipes(
       new ValidationPipe({
@@ -934,6 +939,110 @@ describe('AuthController (e2e)', () => {
       })
       .expect(401);
   });
+
+  it('should rate limit repeated login attempts for the same email', async () => {
+    const email = makeEmail('login-rate-limit');
+    const forwardedIp = '203.0.113.10';
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('X-Forwarded-For', forwardedIp)
+        .send({
+          email,
+          password: 'wrongpass',
+        })
+        .expect(401);
+    }
+
+    const blockedResponse = await request(app.getHttpServer())
+      .post('/auth/login')
+      .set('X-Forwarded-For', forwardedIp)
+      .send({
+        email,
+        password: 'wrongpass',
+      })
+      .expect(429);
+
+    expect(blockedResponse.body).toEqual({
+      statusCode: 429,
+      message: AUTH_RATE_LIMIT_ERROR_MESSAGE,
+      error: 'Too Many Requests',
+      code: AUTH_RATE_LIMIT_ERROR_CODE,
+    });
+    expect(blockedResponse.headers['retry-after-auth-identity']).toBeDefined();
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .set('X-Forwarded-For', forwardedIp)
+      .send({
+        email: makeEmail('login-rate-limit-other-account'),
+        password: 'wrongpass',
+      })
+      .expect(401);
+  });
+
+  it('should rate limit repeated registration attempts for the same email', async () => {
+    const email = makeEmail('register-rate-limit');
+    const forwardedIp = '203.0.113.11';
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .set('X-Forwarded-For', forwardedIp)
+      .send(makeRegisterBody(email))
+      .expect(201);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .set('X-Forwarded-For', forwardedIp)
+        .send(makeRegisterBody(email))
+        .expect(409);
+    }
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .set('X-Forwarded-For', forwardedIp)
+      .send(makeRegisterBody(email))
+      .expect(429);
+  });
+
+  it.each([
+    {
+      path: '/auth/forgot-password',
+      label: 'forgot-password-rate-limit',
+      forwardedIp: '203.0.113.12',
+    },
+    {
+      path: '/auth/email-verification/request',
+      label: 'verification-request-rate-limit',
+      forwardedIp: '203.0.113.13',
+    },
+  ])(
+    'should rate limit repeated email delivery requests to $path',
+    async ({ path, label, forwardedIp }) => {
+      const email = makeEmail(label);
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await request(app.getHttpServer())
+          .post(path)
+          .set('X-Forwarded-For', forwardedIp)
+          .send({
+            email,
+          })
+          .expect(202);
+      }
+
+      await request(app.getHttpServer())
+        .post(path)
+        .set('X-Forwarded-For', forwardedIp)
+        .send({
+          email,
+        })
+        .expect(429);
+    },
+  );
 
   /**
    * /auth/me token olmadan protected olmalıdır.

@@ -22,6 +22,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { EmailVerificationService } from './email-verification.service';
 import { AccessTokenGuard } from './guards/access-token.guard';
 import { PasswordResetService } from './password-reset.service';
+import { AuthRateLimit } from './rate-limit/auth-rate-limit.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -32,6 +33,7 @@ export class AuthController {
   ) {}
 
   @Post('register')
+  @AuthRateLimit('registration')
   register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
@@ -43,6 +45,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @AuthRateLimit('login')
   login(
     @Body() loginDto: LoginDto,
     @Headers('user-agent') userAgent: string | undefined,
@@ -57,6 +60,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @AuthRateLimit('emailDelivery')
   @HttpCode(HttpStatus.ACCEPTED)
   forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
     return this.passwordResetService.request(forgotPasswordDto.email);
@@ -72,6 +76,7 @@ export class AuthController {
   }
 
   @Post('email-verification/request')
+  @AuthRateLimit('emailDelivery')
   @HttpCode(HttpStatus.ACCEPTED)
   requestEmailVerification(
     @Body() requestEmailVerificationDto: RequestEmailVerificationDto,

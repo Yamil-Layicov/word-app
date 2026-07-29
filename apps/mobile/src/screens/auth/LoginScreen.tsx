@@ -2,21 +2,17 @@ import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { useLogin, useStartSession } from "@/features/auth";
+import {
+  useLogin,
+  useStartSession,
+  validateLoginForm,
+  type LoginFormErrors,
+} from "@/features/auth";
 import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { isApiError } from "@/shared/api/http-error";
 import { AuthScreenScaffold } from "@/shared/layout/AuthScreenScaffold";
 import { colors, spacing, typography } from "@/shared/theme";
 import { Button, PasswordField, TextField } from "@/shared/ui";
-
-type LoginErrors = {
-  email?: string;
-  password?: string;
-};
-
-function isEmail(value: string) {
-  return /^\S+@\S+\.\S+$/.test(value.trim());
-}
 
 export function LoginScreen() {
   const router = useRouter();
@@ -24,43 +20,31 @@ export function LoginScreen() {
   const startSession = useStartSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState<LoginErrors>({});
+  const [errors, setErrors] = useState<LoginFormErrors>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeType, setNoticeType] = useState<"info" | "error">("info");
 
   const handleSubmit = async () => {
-    const nextErrors: LoginErrors = {};
-
-    if (!email.trim()) {
-      nextErrors.email = "Email address is required.";
-    } else if (!isEmail(email)) {
-      nextErrors.email = "Enter a valid email address.";
-    }
-
-    if (!password) {
-      nextErrors.password = "Password is required.";
-    } else if (password.length < 8) {
-      nextErrors.password = "Password must be at least 8 characters.";
-    }
-
-    setErrors(nextErrors);
+    const validation = validateLoginForm({ email, password });
     setNotice(null);
 
-    if (Object.keys(nextErrors).length === 0) {
-      try {
-        const response = await loginMutation.mutateAsync({
-          email: email.trim().toLowerCase(),
-          password,
-        });
+    if (!validation.success) {
+      setErrors(validation.errors);
+      return;
+    }
 
-        await startSession(response);
-        router.replace(
-          consumePendingNotificationDestination() ?? "/(app)",
-        );
-      } catch (error) {
-        setNoticeType("error");
-        setNotice(isApiError(error) ? error.message : "Could not log in.");
-      }
+    setErrors({});
+
+    try {
+      const response = await loginMutation.mutateAsync(validation.data);
+
+      await startSession(response);
+      router.replace(
+        consumePendingNotificationDestination() ?? "/(app)",
+      );
+    } catch (error) {
+      setNoticeType("error");
+      setNotice(isApiError(error) ? error.message : "Could not log in.");
     }
   };
 

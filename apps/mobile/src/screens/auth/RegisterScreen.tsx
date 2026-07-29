@@ -2,22 +2,14 @@ import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { saveRegisterDraft } from "@/features/auth";
+import {
+  saveRegisterDraft,
+  validateRegisterForm,
+  type RegisterFormErrors,
+} from "@/features/auth";
 import { AuthScreenScaffold } from "@/shared/layout/AuthScreenScaffold";
 import { colors, spacing, typography } from "@/shared/theme";
 import { Button, Checkbox, PasswordField, TextField } from "@/shared/ui";
-
-type RegisterErrors = {
-  fullName?: string;
-  email?: string;
-  password?: string;
-  confirmPassword?: string;
-  terms?: string;
-};
-
-function isEmail(value: string) {
-  return /^\S+@\S+\.\S+$/.test(value.trim());
-}
 
 export function RegisterScreen() {
   const router = useRouter();
@@ -26,47 +18,25 @@ export function RegisterScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [errors, setErrors] = useState<RegisterErrors>({});
+  const [errors, setErrors] = useState<RegisterFormErrors>({});
 
   const handleSubmit = () => {
-    const nextErrors: RegisterErrors = {};
+    const validation = validateRegisterForm({
+      fullName,
+      email,
+      password,
+      confirmPassword,
+      acceptedTerms,
+    });
 
-    if (!fullName.trim()) {
-      nextErrors.fullName = "Full name is required.";
+    if (!validation.success) {
+      setErrors(validation.errors);
+      return;
     }
 
-    if (!email.trim()) {
-      nextErrors.email = "Email address is required.";
-    } else if (!isEmail(email)) {
-      nextErrors.email = "Enter a valid email address.";
-    }
-
-    if (!password) {
-      nextErrors.password = "Password is required.";
-    } else if (password.length < 8) {
-      nextErrors.password = "Password must be at least 8 characters.";
-    }
-
-    if (!confirmPassword) {
-      nextErrors.confirmPassword = "Confirm your password.";
-    } else if (confirmPassword !== password) {
-      nextErrors.confirmPassword = "Passwords do not match.";
-    }
-
-    if (!acceptedTerms) {
-      nextErrors.terms = "You need to accept the terms to continue.";
-    }
-
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length === 0) {
-      saveRegisterDraft({
-        displayName: fullName.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-      });
-      router.push("/language-pair");
-    }
+    setErrors({});
+    saveRegisterDraft(validation.data);
+    router.push("/language-pair");
   };
 
   return (

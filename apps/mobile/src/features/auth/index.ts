@@ -5,6 +5,14 @@ export {
   useAuthSession,
 } from "./AuthSessionProvider";
 export { authQueryKeys } from "./query-keys";
+export {
+  validateLoginForm,
+  validateRegisterForm,
+  type LoginFormErrors,
+  type LoginFormValues,
+  type RegisterFormErrors,
+  type RegisterFormValues,
+} from "./form-validation";
 export { useLogin } from "./hooks/useLogin";
 export { useLogout } from "./hooks/useLogout";
 export { useRegister } from "./hooks/useRegister";

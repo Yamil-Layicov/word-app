@@ -10,19 +10,13 @@ import {
 import { useRouter } from "expo-router";
 
 import {
-  AUTH_ROUTE_NOTICE,
   clearRegisterDraft,
   getRegisterDraft,
   saveRegisterDraft,
   useRegister,
-  useStartSession,
-  type AuthTokensResponse,
+  type RegisterResponse,
 } from "@/features/auth";
-import {
-  useLanguagePairsQuery,
-  type LanguagePair,
-} from "@/entities/lookups";
-import { consumePendingNotificationDestination } from "@/features/push-notifications";
+import { useLanguagePairsQuery, type LanguagePair } from "@/entities/lookups";
 import { ApiError } from "@/shared/api/http-error";
 import { LanguagePairSelectionScreen } from "../LanguagePairSelectionScreen";
 
@@ -43,25 +37,16 @@ jest.mock("@/features/auth", () => ({
   ...jest.requireActual("@/features/auth/auth-route-notice"),
   ...jest.requireActual("@/features/auth/register-draft"),
   useRegister: jest.fn(),
-  useStartSession: jest.fn(),
-}));
-
-jest.mock("@/features/push-notifications", () => ({
-  consumePendingNotificationDestination: jest.fn(),
 }));
 
 const useRouterMock = useRouter as jest.Mock;
 const useLanguagePairsQueryMock = useLanguagePairsQuery as jest.Mock;
 const useRegisterMock = useRegister as jest.Mock;
-const useStartSessionMock = useStartSession as jest.Mock;
-const consumePendingDestinationMock =
-  consumePendingNotificationDestination as jest.Mock;
 
 const router = {
   replace: jest.fn(),
 };
 const register = jest.fn();
-const startSession = jest.fn();
 const refetch = jest.fn();
 
 const languagePair: LanguagePair = {
@@ -80,24 +65,19 @@ const languagePair: LanguagePair = {
   },
 };
 
-const authResponse: AuthTokensResponse = {
-  accessToken: "access-token",
-  refreshToken: "refresh-token",
-  user: {
-    id: "user-1",
-    email: "user@example.com",
-    role: "USER",
-    status: "ACTIVE",
-    profile: null,
-    createdAt: "2026-07-29T00:00:00.000Z",
-  },
+const registerResponse: RegisterResponse = {
+  id: "user-1",
+  email: "user@example.com",
+  role: "USER",
+  status: "ACTIVE",
+  profile: null,
+  createdAt: "2026-07-29T00:00:00.000Z",
 };
 
 describe("LanguagePairSelectionScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     register.mockReset();
-    startSession.mockReset();
     refetch.mockReset();
     clearRegisterDraft();
     useRouterMock.mockReturnValue(router);
@@ -105,14 +85,12 @@ describe("LanguagePairSelectionScreen", () => {
       mutateAsync: register,
       isPending: false,
     });
-    useStartSessionMock.mockReturnValue(startSession);
     useLanguagePairsQueryMock.mockReturnValue({
       data: [languagePair],
       isError: false,
       isLoading: false,
       refetch,
     });
-    consumePendingDestinationMock.mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -149,9 +127,7 @@ describe("LanguagePairSelectionScreen", () => {
     render(<LanguagePairSelectionScreen />);
 
     selectLanguagePair();
-    fireEvent.press(
-      screen.getByRole("button", { name: "Create account" }),
-    );
+    fireEvent.press(screen.getByRole("button", { name: "Create account" }));
 
     expect(
       screen.getByText("Start from the register screen first."),
@@ -170,28 +146,22 @@ describe("LanguagePairSelectionScreen", () => {
     render(<LanguagePairSelectionScreen />);
 
     selectLanguagePair();
-    fireEvent.press(
-      screen.getByRole("button", { name: "Create account" }),
-    );
+    fireEvent.press(screen.getByRole("button", { name: "Create account" }));
 
     expect(await screen.findByText("Email already in use")).toBeTruthy();
-    expect(startSession).not.toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
     expect(getRegisterDraft()).toMatchObject({
       languagePairId: "pair-1",
     });
   });
 
-  it("starts the session, clears the draft, and opens the app", async () => {
+  it("clears the draft and opens email verification after registration", async () => {
     saveDraft();
-    register.mockResolvedValue(authResponse);
-    startSession.mockResolvedValue(undefined);
+    register.mockResolvedValue(registerResponse);
     render(<LanguagePairSelectionScreen />);
 
     selectLanguagePair();
-    fireEvent.press(
-      screen.getByRole("button", { name: "Create account" }),
-    );
+    fireEvent.press(screen.getByRole("button", { name: "Create account" }));
 
     await waitFor(() => {
       expect(register).toHaveBeenCalledWith({
@@ -200,28 +170,10 @@ describe("LanguagePairSelectionScreen", () => {
         displayName: "Yamil Test",
         languagePairId: "pair-1",
       });
-      expect(startSession).toHaveBeenCalledWith(authResponse);
-      expect(router.replace).toHaveBeenCalledWith("/(app)");
-    });
-    expect(getRegisterDraft()).toBeNull();
-  });
-
-  it("prevents duplicate registration when local session start fails", async () => {
-    saveDraft();
-    register.mockResolvedValue(authResponse);
-    startSession.mockRejectedValue(new Error("Secure storage failed"));
-    render(<LanguagePairSelectionScreen />);
-
-    selectLanguagePair();
-    fireEvent.press(
-      screen.getByRole("button", { name: "Create account" }),
-    );
-
-    await waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith({
-        pathname: "/login",
+        pathname: "/verify-email",
         params: {
-          notice: AUTH_ROUTE_NOTICE.accountCreated,
+          email: "user@example.com",
         },
       });
     });

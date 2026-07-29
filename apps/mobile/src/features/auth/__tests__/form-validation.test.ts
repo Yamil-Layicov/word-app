@@ -1,11 +1,25 @@
 /// <reference types="jest" />
 
 import {
+  isValidEmailVerificationToken,
   validateForgotPasswordForm,
   validateLoginForm,
   validateRegisterForm,
   validateResetPasswordForm,
 } from "../form-validation";
+
+describe("isValidEmailVerificationToken", () => {
+  it("accepts a 32-byte base64url token and trims route input", () => {
+    expect(isValidEmailVerificationToken(` ${"a".repeat(43)} `)).toBe(true);
+  });
+
+  it.each(["", "short-token", "a".repeat(42), `${"a".repeat(42)}!`])(
+    "rejects an invalid verification token: %s",
+    (token) => {
+      expect(isValidEmailVerificationToken(token)).toBe(false);
+    },
+  );
+});
 
 describe("validateForgotPasswordForm", () => {
   it("returns a required error for an empty email", () => {

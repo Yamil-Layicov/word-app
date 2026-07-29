@@ -36,6 +36,8 @@ export type RegisterRequest = {
   languagePairId: string;
 };
 
+export type RegisterResponse = AuthUser;
+
 export type LoginRequest = {
   email: string;
   password: string;
@@ -55,5 +57,21 @@ export type ResetPasswordRequest = {
 };
 
 export type ResetPasswordResponse = {
+  message: string;
+};
+
+export type RequestEmailVerificationRequest = {
+  email: string;
+};
+
+export type RequestEmailVerificationResponse = {
+  message: string;
+};
+
+export type ConfirmEmailVerificationRequest = {
+  token: string;
+};
+
+export type ConfirmEmailVerificationResponse = {
   message: string;
 };

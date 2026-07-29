@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
+  AUTH_API_ERROR_CODE,
   useLogin,
   useStartSession,
   validateLoginForm,
@@ -47,6 +48,19 @@ export function LoginScreen() {
       await startSession(response);
       router.replace(consumePendingNotificationDestination() ?? "/(app)");
     } catch (error) {
+      if (
+        isApiError(error) &&
+        error.response?.code === AUTH_API_ERROR_CODE.emailVerificationRequired
+      ) {
+        router.replace({
+          pathname: "/verify-email",
+          params: {
+            email: validation.data.email,
+          },
+        });
+        return;
+      }
+
       setNoticeType("error");
       setNotice(isApiError(error) ? error.message : "Could not log in.");
     }

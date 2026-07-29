@@ -3,17 +3,22 @@ import { authClient } from "@/auth";
 import type {
   AuthTokensResponse,
   AuthUser,
+  ConfirmEmailVerificationRequest,
+  ConfirmEmailVerificationResponse,
   ForgotPasswordRequest,
   ForgotPasswordResponse,
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,
+  RegisterResponse,
+  RequestEmailVerificationRequest,
+  RequestEmailVerificationResponse,
   ResetPasswordRequest,
   ResetPasswordResponse,
 } from "./model";
 
 export function register(input: RegisterRequest) {
-  return baseClient.post<AuthTokensResponse>("/auth/register", input);
+  return baseClient.post<RegisterResponse>("/auth/register", input);
 }
 
 export function login(input: LoginRequest) {
@@ -29,6 +34,24 @@ export function requestPasswordReset(input: ForgotPasswordRequest) {
 
 export function resetPassword(input: ResetPasswordRequest) {
   return baseClient.post<ResetPasswordResponse>("/auth/reset-password", input);
+}
+
+export function requestEmailVerification(
+  input: RequestEmailVerificationRequest,
+) {
+  return baseClient.post<RequestEmailVerificationResponse>(
+    "/auth/email-verification/request",
+    input,
+  );
+}
+
+export function confirmEmailVerification(
+  input: ConfirmEmailVerificationRequest,
+) {
+  return baseClient.post<ConfirmEmailVerificationResponse>(
+    "/auth/email-verification/confirm",
+    input,
+  );
 }
 
 export function refreshSession(input: RefreshTokenRequest) {

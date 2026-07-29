@@ -1,12 +1,15 @@
 export {
+  confirmEmailVerification,
   getCurrentUser,
   login,
   logoutSession,
   refreshSession,
   register,
+  requestEmailVerification,
   requestPasswordReset,
   resetPassword,
 } from "./api";
+export { AUTH_API_ERROR_CODE } from "./auth-api-error-code";
 export {
   AUTH_ROUTE_NOTICE,
   getAuthRouteNoticeMessage,
@@ -22,6 +25,7 @@ export {
   validateLoginForm,
   validateRegisterForm,
   validateResetPasswordForm,
+  isValidEmailVerificationToken,
   isValidPasswordResetToken,
   type ForgotPasswordFormErrors,
   type ForgotPasswordFormValues,
@@ -33,9 +37,11 @@ export {
   type ResetPasswordFormValues,
 } from "./form-validation";
 export { useLogin } from "./hooks/useLogin";
+export { useConfirmEmailVerification } from "./hooks/useConfirmEmailVerification";
 export { useLogout } from "./hooks/useLogout";
 export { useRegister } from "./hooks/useRegister";
 export { useRequestPasswordReset } from "./hooks/useRequestPasswordReset";
+export { useRequestEmailVerification } from "./hooks/useRequestEmailVerification";
 export { useResetPassword } from "./hooks/useResetPassword";
 export { useStartSession } from "./hooks/useStartSession";
 export { useAuthFailureRedirect } from "./hooks/useAuthFailureRedirect";
@@ -54,11 +60,16 @@ export type {
   AuthTokensResponse,
   AuthUser,
   AuthUserProfile,
+  ConfirmEmailVerificationRequest,
+  ConfirmEmailVerificationResponse,
   ForgotPasswordRequest,
   ForgotPasswordResponse,
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,
+  RegisterResponse,
+  RequestEmailVerificationRequest,
+  RequestEmailVerificationResponse,
   ResetPasswordRequest,
   ResetPasswordResponse,
   UserRole,

@@ -12,11 +12,14 @@ import {
 import { AuthService } from './auth.service';
 import type { AuthenticatedUser, AuthRequestContext } from './auth.types';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { ConfirmEmailVerificationDto } from './dto/confirm-email-verification.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { RequestEmailVerificationDto } from './dto/request-email-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { EmailVerificationService } from './email-verification.service';
 import { AccessTokenGuard } from './guards/access-token.guard';
 import { PasswordResetService } from './password-reset.service';
 
@@ -25,6 +28,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly passwordResetService: PasswordResetService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
   @Post('register')
@@ -64,6 +68,26 @@ export class AuthController {
     return this.passwordResetService.reset(
       resetPasswordDto.token,
       resetPasswordDto.newPassword,
+    );
+  }
+
+  @Post('email-verification/request')
+  @HttpCode(HttpStatus.ACCEPTED)
+  requestEmailVerification(
+    @Body() requestEmailVerificationDto: RequestEmailVerificationDto,
+  ) {
+    return this.emailVerificationService.request(
+      requestEmailVerificationDto.email,
+    );
+  }
+
+  @Post('email-verification/confirm')
+  @HttpCode(HttpStatus.OK)
+  confirmEmailVerification(
+    @Body() confirmEmailVerificationDto: ConfirmEmailVerificationDto,
+  ) {
+    return this.emailVerificationService.confirm(
+      confirmEmailVerificationDto.token,
     );
   }
 

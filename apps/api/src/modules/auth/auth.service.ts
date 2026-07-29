@@ -10,6 +10,11 @@ import { ClockService } from '../../common/time/clock.service';
 import { AuthTokenService } from './auth-token.service';
 import { toAuthLoginResponse, toAuthUserResponse } from './auth.mapper';
 import { AuthRepository } from './auth.repository';
+import {
+  EMAIL_VERIFICATION_REQUIRED_CODE,
+  EMAIL_VERIFICATION_REQUIRED_MESSAGE,
+  EmailVerificationService,
+} from './email-verification.service';
 import type {
   AuthenticatedUser,
   AuthLoginResponse,
@@ -28,6 +33,7 @@ export class AuthService {
     private readonly passwordService: PasswordService,
     private readonly authTokenService: AuthTokenService,
     private readonly clockService: ClockService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthUserResponse> {
@@ -60,6 +66,7 @@ export class AuthService {
     }
 
     const passwordHash = await this.passwordService.hash(registerDto.password);
+    const emailVerificationToken = this.emailVerificationService.issue();
 
     const user = await this.authRepository.createUserWithProfile({
       email,
@@ -67,7 +74,13 @@ export class AuthService {
       displayName: registerDto.displayName?.trim(),
       countryCode,
       languagePairId: registerDto.languagePairId,
+      emailVerificationToken: {
+        tokenHash: emailVerificationToken.tokenHash,
+        expiresAt: emailVerificationToken.expiresAt,
+      },
     });
+
+    this.emailVerificationService.dispatch(email, emailVerificationToken);
 
     return toAuthUserResponse(user);
   }
@@ -108,6 +121,15 @@ export class AuthService {
 
     if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenException('Account is not active');
+    }
+
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        message: EMAIL_VERIFICATION_REQUIRED_MESSAGE,
+        error: 'Forbidden',
+        code: EMAIL_VERIFICATION_REQUIRED_CODE,
+      });
     }
 
     const sessionId = this.authTokenService.generateSessionId();

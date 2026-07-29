@@ -25,6 +25,10 @@ type CreateUserWithProfileInput = {
   displayName?: string;
   countryCode?: string;
   languagePairId: string;
+  emailVerificationToken: {
+    tokenHash: string;
+    expiresAt: Date;
+  };
 };
 
 type CreateAuthSessionInput = {
@@ -90,6 +94,7 @@ export class AuthRepository {
       select: {
         ...authUserResponseSelect,
         passwordHash: true,
+        emailVerifiedAt: true,
       },
     });
   }
@@ -149,6 +154,9 @@ export class AuthRepository {
           create: {
             languagePairId: input.languagePairId,
           },
+        },
+        emailVerificationTokens: {
+          create: input.emailVerificationToken,
         },
       },
       select: authUserResponseSelect,

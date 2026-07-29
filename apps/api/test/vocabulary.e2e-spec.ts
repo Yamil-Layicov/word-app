@@ -299,6 +299,11 @@ describe('VocabularyController (e2e)', () => {
       })
       .expect(201);
 
+    await prisma.user.update({
+      where: { email },
+      data: { emailVerifiedAt: new Date() },
+    });
+
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
       .send({

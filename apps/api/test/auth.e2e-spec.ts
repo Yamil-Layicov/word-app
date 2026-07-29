@@ -13,10 +13,22 @@
  */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { createHash } from 'crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
+import {
+  EMAIL_VERIFICATION_EMAIL_GATEWAY,
+  type EmailVerificationEmailGateway,
+  type EmailVerificationEmailMessage,
+} from '../src/modules/auth/email-verification-email.gateway';
+import {
+  EMAIL_VERIFICATION_REQUEST_MESSAGE,
+  EMAIL_VERIFICATION_REQUIRED_CODE,
+  EMAIL_VERIFICATION_SUCCESS_MESSAGE,
+  INVALID_EMAIL_VERIFICATION_TOKEN_MESSAGE,
+} from '../src/modules/auth/email-verification.service';
 import {
   PASSWORD_RESET_EMAIL_GATEWAY,
   type PasswordResetEmailGateway,
@@ -70,7 +82,18 @@ describe('AuthController (e2e)', () => {
   const runId = `${Date.now()}`;
   const password = 'password123';
   const createdEmails: string[] = [];
+  const verificationEmails: EmailVerificationEmailMessage[] = [];
   const resetEmails: PasswordResetEmailMessage[] = [];
+
+  const emailVerificationEmailGateway: EmailVerificationEmailGateway = {
+    send: jest.fn((message: EmailVerificationEmailMessage) => {
+      verificationEmails.push(message);
+
+      return Promise.resolve({
+        providerMessageId: `test-verification-${verificationEmails.length}`,
+      });
+    }),
+  };
 
   const passwordResetEmailGateway: PasswordResetEmailGateway = {
     send: jest.fn((message: PasswordResetEmailMessage) => {
@@ -126,6 +149,33 @@ describe('AuthController (e2e)', () => {
     return token;
   }
 
+  function getEmailVerificationToken(email: string): string {
+    const message = [...verificationEmails]
+      .reverse()
+      .find((candidate) => candidate.to === email);
+
+    if (!message) {
+      throw new Error(`Email verification email was not captured for ${email}`);
+    }
+
+    const token = new URL(message.verificationUrl).searchParams.get('token');
+
+    if (!token) {
+      throw new Error('Email verification email does not contain a token');
+    }
+
+    return token;
+  }
+
+  async function verifyTestUser(email: string): Promise<void> {
+    await request(app.getHttpServer())
+      .post('/auth/email-verification/confirm')
+      .send({
+        token: getEmailVerificationToken(email),
+      })
+      .expect(200);
+  }
+
   /**
    * Test user register edir, sonra login edib token response qaytarır.
    *
@@ -143,6 +193,8 @@ describe('AuthController (e2e)', () => {
       .post('/auth/register')
       .send(makeRegisterBody(email))
       .expect(201);
+
+    await verifyTestUser(email);
 
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
@@ -167,6 +219,8 @@ describe('AuthController (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(EMAIL_VERIFICATION_EMAIL_GATEWAY)
+      .useValue(emailVerificationEmailGateway)
       .overrideProvider(PASSWORD_RESET_EMAIL_GATEWAY)
       .useValue(passwordResetEmailGateway)
       .compile();
@@ -269,6 +323,14 @@ describe('AuthController (e2e)', () => {
       select: {
         id: true,
         email: true,
+        emailVerifiedAt: true,
+        emailVerificationTokens: {
+          select: {
+            tokenHash: true,
+            usedAt: true,
+            revokedAt: true,
+          },
+        },
         profile: {
           select: {
             displayName: true,
@@ -280,8 +342,23 @@ describe('AuthController (e2e)', () => {
 
     expect(createdUser).not.toBeNull();
     expect(createdUser?.email).toBe(email);
+    expect(createdUser?.emailVerifiedAt).toBeNull();
+    expect(createdUser?.emailVerificationTokens).toHaveLength(1);
+    expect(createdUser?.emailVerificationTokens[0]).toMatchObject({
+      usedAt: null,
+      revokedAt: null,
+    });
     expect(createdUser?.profile?.displayName).toBe('Auth E2E User');
     expect(createdUser?.profile?.activeLanguagePairId).toBe(languagePairId);
+
+    const rawToken = getEmailVerificationToken(email);
+    const storedTokenHash = createdUser?.emailVerificationTokens[0]?.tokenHash;
+
+    expect(rawToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(storedTokenHash).toBe(
+      createHash('sha256').update(rawToken).digest('hex'),
+    );
+    expect(storedTokenHash).not.toBe(rawToken);
   });
 
   /**
@@ -315,6 +392,237 @@ describe('AuthController (e2e)', () => {
       .post('/auth/register')
       .send(makeRegisterBody(email))
       .expect(409);
+  });
+
+  it('should block login until the email is verified', async () => {
+    const email = makeEmail('login-unverified');
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(makeRegisterBody(email))
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        email,
+        password,
+      })
+      .expect(403);
+
+    expect(response.body).toMatchObject({
+      code: EMAIL_VERIFICATION_REQUIRED_CODE,
+    });
+  });
+
+  it('should verify an account once and then allow login', async () => {
+    const email = makeEmail('email-verification-success');
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(makeRegisterBody(email))
+      .expect(201);
+
+    const rawToken = getEmailVerificationToken(email);
+    const confirmResponse = await request(app.getHttpServer())
+      .post('/auth/email-verification/confirm')
+      .send({
+        token: rawToken,
+      })
+      .expect(200);
+
+    expect(confirmResponse.body).toEqual({
+      message: EMAIL_VERIFICATION_SUCCESS_MESSAGE,
+    });
+
+    const verifiedUser = await prisma.user.findUniqueOrThrow({
+      where: {
+        email,
+      },
+      select: {
+        emailVerifiedAt: true,
+      },
+    });
+
+    expect(verifiedUser.emailVerifiedAt).toBeInstanceOf(Date);
+
+    const reusedTokenResponse = await request(app.getHttpServer())
+      .post('/auth/email-verification/confirm')
+      .send({
+        token: rawToken,
+      })
+      .expect(400);
+
+    expect(reusedTokenResponse.body).toMatchObject({
+      message: INVALID_EMAIL_VERIFICATION_TOKEN_MESSAGE,
+    });
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        email,
+        password,
+      })
+      .expect(201);
+  });
+
+  it('should allow only one concurrent confirmation for the same token', async () => {
+    const email = makeEmail('email-verification-concurrent');
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(makeRegisterBody(email))
+      .expect(201);
+
+    const rawToken = getEmailVerificationToken(email);
+    const responses = await Promise.all(
+      Array.from({ length: 2 }, () =>
+        request(app.getHttpServer())
+          .post('/auth/email-verification/confirm')
+          .send({
+            token: rawToken,
+          }),
+      ),
+    );
+
+    expect(responses.map(({ status }) => status).sort()).toEqual([200, 400]);
+
+    const user = await prisma.user.findUniqueOrThrow({
+      where: {
+        email,
+      },
+      select: {
+        emailVerifiedAt: true,
+        emailVerificationTokens: {
+          select: {
+            usedAt: true,
+          },
+        },
+      },
+    });
+
+    expect(user.emailVerifiedAt).toBeInstanceOf(Date);
+    expect(user.emailVerificationTokens).toHaveLength(1);
+    expect(user.emailVerificationTokens[0]?.usedAt).toBeInstanceOf(Date);
+  });
+
+  it('should replace an unverified account token without revealing account existence', async () => {
+    const email = makeEmail('email-verification-request');
+    const unknownEmail = makeEmail('email-verification-unknown');
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(makeRegisterBody(email))
+      .expect(201);
+
+    const user = await prisma.user.findUniqueOrThrow({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+        emailVerificationTokens: {
+          select: {
+            tokenHash: true,
+          },
+        },
+      },
+    });
+    const firstTokenHash = user.emailVerificationTokens[0]?.tokenHash;
+    const capturedUnknownEmailsBefore = verificationEmails.filter(
+      (message) => message.to === unknownEmail,
+    ).length;
+
+    const existingResponse = await request(app.getHttpServer())
+      .post('/auth/email-verification/request')
+      .send({
+        email: email.toUpperCase(),
+      })
+      .expect(202);
+    const unknownResponse = await request(app.getHttpServer())
+      .post('/auth/email-verification/request')
+      .send({
+        email: unknownEmail,
+      })
+      .expect(202);
+
+    const currentTokens = await prisma.emailVerificationToken.findMany({
+      where: {
+        userId: user.id,
+      },
+      select: {
+        tokenHash: true,
+        usedAt: true,
+        revokedAt: true,
+      },
+    });
+
+    expect(existingResponse.body).toEqual({
+      message: EMAIL_VERIFICATION_REQUEST_MESSAGE,
+    });
+    expect(unknownResponse.body).toEqual(existingResponse.body);
+    expect(currentTokens).toHaveLength(1);
+    expect(currentTokens[0]).toMatchObject({
+      usedAt: null,
+      revokedAt: null,
+    });
+    expect(currentTokens[0]?.tokenHash).not.toBe(firstTokenHash);
+    expect(
+      verificationEmails.filter((message) => message.to === unknownEmail),
+    ).toHaveLength(capturedUnknownEmailsBefore);
+  });
+
+  it('should return the same safe error for expired and unknown verification tokens', async () => {
+    const email = makeEmail('email-verification-expired');
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(makeRegisterBody(email))
+      .expect(201);
+
+    const rawToken = getEmailVerificationToken(email);
+    const user = await prisma.user.findUniqueOrThrow({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await prisma.emailVerificationToken.update({
+      where: {
+        userId: user.id,
+      },
+      data: {
+        expiresAt: new Date(Date.now() - 1_000),
+      },
+    });
+
+    const expiredResponse = await request(app.getHttpServer())
+      .post('/auth/email-verification/confirm')
+      .send({
+        token: rawToken,
+      })
+      .expect(400);
+    const unknownResponse = await request(app.getHttpServer())
+      .post('/auth/email-verification/confirm')
+      .send({
+        token: 'a'.repeat(43),
+      })
+      .expect(400);
+
+    expect(expiredResponse.body).toMatchObject({
+      message: INVALID_EMAIL_VERIFICATION_TOKEN_MESSAGE,
+    });
+    expect(unknownResponse.body).toMatchObject({
+      message: INVALID_EMAIL_VERIFICATION_TOKEN_MESSAGE,
+    });
   });
 
   it('should reject an invalid forgot-password email', async () => {
@@ -484,6 +792,8 @@ describe('AuthController (e2e)', () => {
       .post('/auth/register')
       .send(makeRegisterBody(email))
       .expect(201);
+    await verifyTestUser(email);
+
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
       .send({
@@ -588,6 +898,7 @@ describe('AuthController (e2e)', () => {
       .post('/auth/register')
       .send(makeRegisterBody(email))
       .expect(201);
+    await verifyTestUser(email);
 
     const response = await request(app.getHttpServer())
       .post('/auth/login')

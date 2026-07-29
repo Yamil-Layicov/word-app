@@ -58,7 +58,7 @@ type FormValidationResult<TData, TErrors> =
     };
 
 const EMAIL_PATTERN = /^\S+@\S+\.\S+$/;
-const PASSWORD_RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const AUTH_ACTION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const MIN_PASSWORD_LENGTH = 8;
 
 export function validateLoginForm(
@@ -142,7 +142,11 @@ export function validateResetPasswordForm(
 }
 
 export function isValidPasswordResetToken(token: string): boolean {
-  return PASSWORD_RESET_TOKEN_PATTERN.test(token.trim());
+  return isValidAuthActionToken(token);
+}
+
+export function isValidEmailVerificationToken(token: string): boolean {
+  return isValidAuthActionToken(token);
 }
 
 export function validateRegisterForm(
@@ -196,6 +200,10 @@ function validateEmail(email: string, errors: { email?: string }) {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function isValidAuthActionToken(token: string): boolean {
+  return AUTH_ACTION_TOKEN_PATTERN.test(token.trim());
 }
 
 function hasErrors(errors: object) {

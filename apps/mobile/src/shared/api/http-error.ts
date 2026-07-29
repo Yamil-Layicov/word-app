@@ -2,6 +2,7 @@ export type ApiErrorResponse = {
   statusCode?: number;
   message?: string | string[];
   error?: string;
+  code?: string;
 };
 
 type ApiErrorInput = {
@@ -41,7 +42,9 @@ export function normalizeApiErrorMessage(
   }
 
   if (Array.isArray(message)) {
-    const firstMessage = message.find((item) => typeof item === "string" && item.trim());
+    const firstMessage = message.find(
+      (item) => typeof item === "string" && item.trim(),
+    );
 
     if (typeof firstMessage === "string") {
       return firstMessage;
@@ -71,13 +74,15 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
     return false;
   }
 
-  const { statusCode, message, error } = value;
+  const { statusCode, message, error, code } = value;
 
   return (
     (statusCode === undefined || typeof statusCode === "number") &&
     (message === undefined ||
       typeof message === "string" ||
-      (Array.isArray(message) && message.every((item) => typeof item === "string"))) &&
-    (error === undefined || typeof error === "string")
+      (Array.isArray(message) &&
+        message.every((item) => typeof item === "string"))) &&
+    (error === undefined || typeof error === "string") &&
+    (code === undefined || typeof code === "string")
   );
 }

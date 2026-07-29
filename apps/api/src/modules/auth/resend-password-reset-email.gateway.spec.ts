@@ -86,7 +86,7 @@ describe('ResendPasswordResetEmailGateway', () => {
     } as Response);
 
     await expect(createGateway().send(message)).rejects.toThrow(
-      'Password reset email request failed with status 429',
+      'Email request failed with status 429',
     );
   });
 
@@ -98,7 +98,7 @@ describe('ResendPasswordResetEmailGateway', () => {
     } as unknown as Response);
 
     await expect(createGateway().send(message)).rejects.toThrow(
-      'Password reset email response has an invalid format',
+      'Email response has an invalid format',
     );
   });
 

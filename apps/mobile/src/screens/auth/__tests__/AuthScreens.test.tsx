@@ -10,12 +10,14 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
+  AUTH_API_ERROR_CODE,
   saveRegisterDraft,
   useLogin,
   useStartSession,
   type AuthTokensResponse,
 } from "@/features/auth";
 import { consumePendingNotificationDestination } from "@/features/push-notifications";
+import { ApiError } from "@/shared/api/http-error";
 import { LoginScreen } from "../LoginScreen";
 import { RegisterScreen } from "../RegisterScreen";
 
@@ -31,6 +33,7 @@ jest.mock("@expo/vector-icons", () => ({
 
 jest.mock("@/features/auth", () => ({
   ...jest.requireActual("@/features/auth/auth-route-notice"),
+  ...jest.requireActual("@/features/auth/auth-api-error-code"),
   ...jest.requireActual("@/features/auth/form-validation"),
   saveRegisterDraft: jest.fn(),
   useLogin: jest.fn(),
@@ -141,6 +144,51 @@ describe("LoginScreen", () => {
         "Your password was reset. Log in with your new password.",
       ),
     ).toBeTruthy();
+  });
+
+  it("shows the email-verified notice passed by verification", () => {
+    useLocalSearchParamsMock.mockReturnValue({
+      notice: "email-verified",
+    });
+
+    render(<LoginScreen />);
+
+    expect(
+      screen.getByText("Your email was verified. Log in to continue."),
+    ).toBeTruthy();
+  });
+
+  it("opens verification when the backend requires email confirmation", async () => {
+    login.mockRejectedValue(
+      new ApiError({
+        status: 403,
+        message: "Verify your email before logging in.",
+        response: {
+          statusCode: 403,
+          message: "Verify your email before logging in.",
+          error: "Forbidden",
+          code: AUTH_API_ERROR_CODE.emailVerificationRequired,
+        },
+      }),
+    );
+    render(<LoginScreen />);
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText("Email address"),
+      "  USER@Example.COM ",
+    );
+    fireEvent.changeText(screen.getByPlaceholderText("Password"), "password");
+    fireEvent.press(screen.getByRole("button", { name: "Log in" }));
+
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith({
+        pathname: "/verify-email",
+        params: {
+          email: "user@example.com",
+        },
+      });
+    });
+    expect(startSession).not.toHaveBeenCalled();
   });
 
   it("opens the forgot-password route", () => {

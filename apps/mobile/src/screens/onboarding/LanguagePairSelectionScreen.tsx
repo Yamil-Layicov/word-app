@@ -6,16 +6,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
 import {
-  AUTH_ROUTE_NOTICE,
   buildRegisterRequest,
   clearRegisterDraft,
   getRegisterDraft,
   saveRegisterLanguagePair,
   useRegister,
-  useStartSession,
-  type AuthTokensResponse,
 } from "@/features/auth";
-import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
@@ -24,13 +20,17 @@ import { Button } from "@/shared/ui";
 export function LanguagePairSelectionScreen() {
   const router = useRouter();
   const registerMutation = useRegister();
-  const startSession = useStartSession();
   const registerDraft = getRegisterDraft();
-  const [selectedLanguagePairId, setSelectedLanguagePairId] = useState<string | null>(
-    registerDraft?.languagePairId ?? null,
-  );
+  const [selectedLanguagePairId, setSelectedLanguagePairId] = useState<
+    string | null
+  >(registerDraft?.languagePairId ?? null);
   const [notice, setNotice] = useState<string | null>(null);
-  const { data: languagePairs, isError, isLoading, refetch } = useLanguagePairsQuery();
+  const {
+    data: languagePairs,
+    isError,
+    isLoading,
+    refetch,
+  } = useLanguagePairsQuery();
 
   const selectedLanguagePair = languagePairs?.find(
     (languagePair) => languagePair.id === selectedLanguagePairId,
@@ -57,32 +57,29 @@ export function LanguagePairSelectionScreen() {
 
     setNotice(null);
 
-    let response: AuthTokensResponse;
-
     try {
-      response = await registerMutation.mutateAsync(registerRequest);
+      await registerMutation.mutateAsync(registerRequest);
     } catch (error) {
-      setNotice(isApiError(error) ? error.message : "Could not create your account.");
+      setNotice(
+        isApiError(error) ? error.message : "Could not create your account.",
+      );
       return;
     }
 
     clearRegisterDraft();
-
-    try {
-      await startSession(response);
-      router.replace(consumePendingNotificationDestination() ?? "/(app)");
-    } catch {
-      router.replace({
-        pathname: "/login",
-        params: {
-          notice: AUTH_ROUTE_NOTICE.accountCreated,
-        },
-      });
-    }
+    router.replace({
+      pathname: "/verify-email",
+      params: {
+        email: registerRequest.email,
+      },
+    });
   };
 
   return (
-    <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
+    <ScreenContainer
+      backgroundColor={colors.backgroundWarm}
+      contentStyle={styles.content}
+    >
       <View style={styles.topBar}>
         <Link href="/register" style={styles.backLink}>
           Back
@@ -104,8 +101,14 @@ export function LanguagePairSelectionScreen() {
       {isError ? (
         <View style={styles.stateBox}>
           <Text style={styles.stateTitle}>Could not load language pairs.</Text>
-          <Text style={styles.stateText}>Check the API connection and try again.</Text>
-          <Button title="Try again" variant="secondary" onPress={() => void refetch()} />
+          <Text style={styles.stateText}>
+            Check the API connection and try again.
+          </Text>
+          <Button
+            title="Try again"
+            variant="secondary"
+            onPress={() => void refetch()}
+          />
         </View>
       ) : null}
 
@@ -147,7 +150,11 @@ type LanguagePairOptionProps = {
   onPress: () => void;
 };
 
-function LanguagePairOption({ languagePair, selected, onPress }: LanguagePairOptionProps) {
+function LanguagePairOption({
+  languagePair,
+  selected,
+  onPress,
+}: LanguagePairOptionProps) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -156,14 +163,20 @@ function LanguagePairOption({ languagePair, selected, onPress }: LanguagePairOpt
       onPress={onPress}
     >
       <View style={styles.optionIcon}>
-        <Ionicons name="book-outline" size={22} color={selected ? colors.white : colors.navy} />
+        <Ionicons
+          name="book-outline"
+          size={22}
+          color={selected ? colors.white : colors.navy}
+        />
       </View>
       <View style={styles.optionText}>
         <Text style={styles.optionTitle}>
-          {languagePair.sourceLanguage.name} to {languagePair.targetLanguage.name}
+          {languagePair.sourceLanguage.name} to{" "}
+          {languagePair.targetLanguage.name}
         </Text>
         <Text style={styles.optionSubtitle}>
-          {languagePair.sourceLanguage.nativeName} {"->"} {languagePair.targetLanguage.nativeName}
+          {languagePair.sourceLanguage.nativeName} {"->"}{" "}
+          {languagePair.targetLanguage.nativeName}
         </Text>
       </View>
       <Ionicons

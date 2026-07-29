@@ -20,6 +20,7 @@ export { useStartSession } from "./hooks/useStartSession";
 export { useAuthFailureRedirect } from "./hooks/useAuthFailureRedirect";
 export { useCurrentUserQuery } from "./queries";
 export {
+  buildRegisterRequest,
   clearRegisterDraft,
   getRegisterDraft,
   isCompleteRegisterDraft,

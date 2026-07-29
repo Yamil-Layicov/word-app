@@ -1,3 +1,5 @@
+import type { RegisterRequest } from "./model";
+
 export type RegisterDraft = {
   displayName: string;
   email: string;
@@ -36,6 +38,21 @@ export function isCompleteRegisterDraft(
   draft: RegisterDraft | null,
 ): draft is CompleteRegisterDraft {
   return Boolean(draft?.languagePairId);
+}
+
+export function buildRegisterRequest(
+  draft: RegisterDraft | null,
+): RegisterRequest | null {
+  if (!isCompleteRegisterDraft(draft)) {
+    return null;
+  }
+
+  return {
+    email: draft.email,
+    password: draft.password,
+    displayName: draft.displayName,
+    languagePairId: draft.languagePairId,
+  };
 }
 
 export function clearRegisterDraft() {

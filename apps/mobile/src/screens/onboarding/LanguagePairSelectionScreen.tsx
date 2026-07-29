@@ -6,9 +6,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
 import {
+  buildRegisterRequest,
   clearRegisterDraft,
   getRegisterDraft,
-  isCompleteRegisterDraft,
   saveRegisterLanguagePair,
   useRegister,
   useStartSession,
@@ -46,8 +46,9 @@ export function LanguagePairSelectionScreen() {
     }
 
     const nextDraft = saveRegisterLanguagePair(selectedLanguagePair.id);
+    const registerRequest = buildRegisterRequest(nextDraft);
 
-    if (!isCompleteRegisterDraft(nextDraft)) {
+    if (!registerRequest) {
       setNotice("Start from the register screen first.");
       return;
     }
@@ -55,12 +56,7 @@ export function LanguagePairSelectionScreen() {
     setNotice(null);
 
     try {
-      const response = await registerMutation.mutateAsync({
-        email: nextDraft.email,
-        password: nextDraft.password,
-        displayName: nextDraft.displayName,
-        languagePairId: nextDraft.languagePairId,
-      });
+      const response = await registerMutation.mutateAsync(registerRequest);
 
       await startSession(response);
       clearRegisterDraft();

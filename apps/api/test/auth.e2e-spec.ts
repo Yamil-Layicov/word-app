@@ -17,6 +17,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
+import { PASSWORD_RESET_REQUEST_MESSAGE } from '../src/modules/auth/password-reset.service';
 import {
   expectAuthResponseBody,
   expectObject,
@@ -273,6 +274,91 @@ describe('AuthController (e2e)', () => {
       .post('/auth/register')
       .send(makeRegisterBody(email))
       .expect(409);
+  });
+
+  it('should reject an invalid forgot-password email', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({
+        email: 'invalid-email',
+      })
+      .expect(400);
+  });
+
+  it('should return the generic response for an unknown email', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({
+        email: makeEmail('forgot-password-unknown'),
+      })
+      .expect(202);
+
+    expect(response.body).toEqual({
+      message: PASSWORD_RESET_REQUEST_MESSAGE,
+    });
+  });
+
+  it('should replace the current reset token without revealing the account', async () => {
+    const email = makeEmail('forgot-password-existing');
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(makeRegisterBody(email))
+      .expect(201);
+
+    const firstResponse = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({
+        email,
+      })
+      .expect(202);
+
+    const user = await prisma.user.findUniqueOrThrow({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+      },
+    });
+    const firstToken = await prisma.passwordResetToken.findUniqueOrThrow({
+      where: {
+        userId: user.id,
+      },
+      select: {
+        tokenHash: true,
+      },
+    });
+
+    const secondResponse = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({
+        email: email.toUpperCase(),
+      })
+      .expect(202);
+
+    const currentTokens = await prisma.passwordResetToken.findMany({
+      where: {
+        userId: user.id,
+      },
+      select: {
+        tokenHash: true,
+        usedAt: true,
+        revokedAt: true,
+      },
+    });
+
+    expect(firstResponse.body).toEqual({
+      message: PASSWORD_RESET_REQUEST_MESSAGE,
+    });
+    expect(secondResponse.body).toEqual(firstResponse.body);
+    expect(currentTokens).toHaveLength(1);
+    expect(currentTokens[0]).toMatchObject({
+      usedAt: null,
+      revokedAt: null,
+    });
+    expect(currentTokens[0]?.tokenHash).not.toBe(firstToken.tokenHash);
   });
 
   /**

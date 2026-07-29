@@ -12,14 +12,19 @@ import {
 import { AuthService } from './auth.service';
 import type { AuthenticatedUser, AuthRequestContext } from './auth.types';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { AccessTokenGuard } from './guards/access-token.guard';
+import { PasswordResetService } from './password-reset.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly passwordResetService: PasswordResetService,
+  ) {}
 
   @Post('register')
   register(@Body() registerDto: RegisterDto) {
@@ -44,6 +49,12 @@ export class AuthController {
     };
 
     return this.authService.login(loginDto, context);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.passwordResetService.request(forgotPasswordDto.email);
   }
 
   @Post('refresh')

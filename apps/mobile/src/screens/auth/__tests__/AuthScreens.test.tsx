@@ -104,10 +104,7 @@ describe("LoginScreen", () => {
       screen.getByPlaceholderText("Email address"),
       "  USER@Example.COM ",
     );
-    fireEvent.changeText(
-      screen.getByPlaceholderText("Password"),
-      "password",
-    );
+    fireEvent.changeText(screen.getByPlaceholderText("Password"), "password");
     fireEvent.press(screen.getByRole("button", { name: "Log in" }));
 
     await waitFor(() => {
@@ -131,6 +128,14 @@ describe("LoginScreen", () => {
       screen.getByText("Your account was created. Log in to continue."),
     ).toBeTruthy();
   });
+
+  it("opens the forgot-password route", () => {
+    render(<LoginScreen />);
+
+    fireEvent.press(screen.getByRole("button", { name: "Forgot password?" }));
+
+    expect(router.push).toHaveBeenCalledWith("./forgot-password");
+  });
 });
 
 describe("RegisterScreen", () => {
@@ -144,9 +149,7 @@ describe("RegisterScreen", () => {
   it("shows validation errors without saving an empty draft", () => {
     render(<RegisterScreen />);
 
-    fireEvent.press(
-      screen.getByRole("button", { name: "Create account" }),
-    );
+    fireEvent.press(screen.getByRole("button", { name: "Create account" }));
 
     expect(screen.getByText("Full name is required.")).toBeTruthy();
     expect(screen.getByText("Email address is required.")).toBeTruthy();
@@ -170,20 +173,13 @@ describe("RegisterScreen", () => {
       screen.getByPlaceholderText("Email address"),
       "  USER@Example.COM ",
     );
-    fireEvent.changeText(
-      screen.getByPlaceholderText("Password"),
-      "password",
-    );
+    fireEvent.changeText(screen.getByPlaceholderText("Password"), "password");
     fireEvent.changeText(
       screen.getByPlaceholderText("Confirm password"),
       "password",
     );
-    fireEvent.press(
-      screen.getByRole("checkbox", { name: "Accept terms" }),
-    );
-    fireEvent.press(
-      screen.getByRole("button", { name: "Create account" }),
-    );
+    fireEvent.press(screen.getByRole("checkbox", { name: "Accept terms" }));
+    fireEvent.press(screen.getByRole("button", { name: "Create account" }));
 
     expect(saveRegisterDraftMock).toHaveBeenCalledWith({
       displayName: "Yamil Test",

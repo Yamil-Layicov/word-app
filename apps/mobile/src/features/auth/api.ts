@@ -3,6 +3,8 @@ import { authClient } from "@/auth";
 import type {
   AuthTokensResponse,
   AuthUser,
+  ForgotPasswordRequest,
+  ForgotPasswordResponse,
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,
@@ -14,6 +16,13 @@ export function register(input: RegisterRequest) {
 
 export function login(input: LoginRequest) {
   return baseClient.post<AuthTokensResponse>("/auth/login", input);
+}
+
+export function requestPasswordReset(input: ForgotPasswordRequest) {
+  return baseClient.post<ForgotPasswordResponse>(
+    "/auth/forgot-password",
+    input,
+  );
 }
 
 export function refreshSession(input: RefreshTokenRequest) {

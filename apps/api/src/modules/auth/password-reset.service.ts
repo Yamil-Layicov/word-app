@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PasswordResetEmailDispatcher } from './password-reset-email.dispatcher';
 import { PasswordResetRepository } from './password-reset.repository';
 import { PasswordResetTokenService } from './password-reset-token.service';
 
@@ -14,6 +15,7 @@ export class PasswordResetService {
   constructor(
     private readonly passwordResetRepository: PasswordResetRepository,
     private readonly passwordResetTokenService: PasswordResetTokenService,
+    private readonly passwordResetEmailDispatcher: PasswordResetEmailDispatcher,
   ) {}
 
   async request(emailInput: string): Promise<PasswordResetRequestResponse> {
@@ -25,6 +27,12 @@ export class PasswordResetService {
     if (user) {
       await this.passwordResetRepository.replaceToken({
         userId: user.id,
+        tokenHash: issuedToken.tokenHash,
+        expiresAt: issuedToken.expiresAt,
+      });
+      void this.passwordResetEmailDispatcher.dispatch({
+        to: email,
+        rawToken: issuedToken.rawToken,
         tokenHash: issuedToken.tokenHash,
         expiresAt: issuedToken.expiresAt,
       });

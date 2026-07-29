@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 
 import { PasswordResetRepository } from './password-reset.repository';
+import { PasswordResetEmailDispatcher } from './password-reset-email.dispatcher';
 import {
   PASSWORD_RESET_REQUEST_MESSAGE,
   PasswordResetService,
@@ -17,12 +18,14 @@ describe('PasswordResetService', () => {
   let findResettableUserByEmailMock: jest.Mock;
   let replaceTokenMock: jest.Mock;
   let issueTokenMock: jest.Mock;
+  let dispatchEmailMock: jest.Mock;
   let service: PasswordResetService;
 
   beforeEach(() => {
     findResettableUserByEmailMock = jest.fn();
     replaceTokenMock = jest.fn();
     issueTokenMock = jest.fn().mockReturnValue(issuedToken);
+    dispatchEmailMock = jest.fn().mockResolvedValue(undefined);
 
     const repository = {
       findResettableUserByEmail: findResettableUserByEmailMock,
@@ -31,8 +34,15 @@ describe('PasswordResetService', () => {
     const tokenService = {
       issue: issueTokenMock,
     } as unknown as PasswordResetTokenService;
+    const emailDispatcher = {
+      dispatch: dispatchEmailMock,
+    } as unknown as PasswordResetEmailDispatcher;
 
-    service = new PasswordResetService(repository, tokenService);
+    service = new PasswordResetService(
+      repository,
+      tokenService,
+      emailDispatcher,
+    );
   });
 
   it('replaces the current token for an existing active account', async () => {
@@ -51,6 +61,12 @@ describe('PasswordResetService', () => {
       tokenHash: issuedToken.tokenHash,
       expiresAt: issuedToken.expiresAt,
     });
+    expect(dispatchEmailMock).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      rawToken: issuedToken.rawToken,
+      tokenHash: issuedToken.tokenHash,
+      expiresAt: issuedToken.expiresAt,
+    });
   });
 
   it('returns the same response without storing a token for an unknown email', async () => {
@@ -61,5 +77,6 @@ describe('PasswordResetService', () => {
     });
     expect(issueTokenMock).toHaveBeenCalledTimes(1);
     expect(replaceTokenMock).not.toHaveBeenCalled();
+    expect(dispatchEmailMock).not.toHaveBeenCalled();
   });
 });

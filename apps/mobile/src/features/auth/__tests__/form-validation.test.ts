@@ -1,9 +1,41 @@
 /// <reference types="jest" />
 
 import {
+  validateForgotPasswordForm,
   validateLoginForm,
   validateRegisterForm,
 } from "../form-validation";
+
+describe("validateForgotPasswordForm", () => {
+  it("returns a required error for an empty email", () => {
+    expect(validateForgotPasswordForm({ email: " " })).toEqual({
+      success: false,
+      errors: {
+        email: "Email address is required.",
+      },
+    });
+  });
+
+  it("rejects an invalid email", () => {
+    expect(validateForgotPasswordForm({ email: "not-an-email" })).toEqual({
+      success: false,
+      errors: {
+        email: "Enter a valid email address.",
+      },
+    });
+  });
+
+  it("normalizes a valid email", () => {
+    expect(
+      validateForgotPasswordForm({ email: "  USER@Example.COM " }),
+    ).toEqual({
+      success: true,
+      data: {
+        email: "user@example.com",
+      },
+    });
+  });
+});
 
 describe("validateLoginForm", () => {
   it("returns required errors for an empty form", () => {

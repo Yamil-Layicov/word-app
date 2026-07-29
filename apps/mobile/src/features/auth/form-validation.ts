@@ -11,6 +11,14 @@ export type LoginFormErrors = {
   password?: string;
 };
 
+export type ForgotPasswordFormValues = {
+  email: string;
+};
+
+export type ForgotPasswordFormErrors = {
+  email?: string;
+};
+
 export type RegisterFormValues = {
   fullName: string;
   email: string;
@@ -66,6 +74,25 @@ export function validateLoginForm(
   };
 }
 
+export function validateForgotPasswordForm(
+  values: ForgotPasswordFormValues,
+): FormValidationResult<ForgotPasswordFormValues, ForgotPasswordFormErrors> {
+  const errors: ForgotPasswordFormErrors = {};
+
+  validateEmail(values.email, errors);
+
+  if (hasErrors(errors)) {
+    return { success: false, errors };
+  }
+
+  return {
+    success: true,
+    data: {
+      email: normalizeEmail(values.email),
+    },
+  };
+}
+
 export function validateRegisterForm(
   values: RegisterFormValues,
 ): FormValidationResult<RegisterDraft, RegisterFormErrors> {
@@ -107,10 +134,7 @@ export function validateRegisterForm(
   };
 }
 
-function validateEmail(
-  email: string,
-  errors: Pick<LoginFormErrors, "email">,
-) {
+function validateEmail(email: string, errors: { email?: string }) {
   if (!email.trim()) {
     errors.email = "Email address is required.";
   } else if (!EMAIL_PATTERN.test(email.trim())) {

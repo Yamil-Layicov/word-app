@@ -45,18 +45,11 @@ export function LoginScreen() {
       const response = await loginMutation.mutateAsync(validation.data);
 
       await startSession(response);
-      router.replace(
-        consumePendingNotificationDestination() ?? "/(app)",
-      );
+      router.replace(consumePendingNotificationDestination() ?? "/(app)");
     } catch (error) {
       setNoticeType("error");
       setNotice(isApiError(error) ? error.message : "Could not log in.");
     }
-  };
-
-  const handleForgotPassword = () => {
-    setNoticeType("info");
-    setNotice("Password reset is not connected yet.");
   };
 
   return (
@@ -97,13 +90,18 @@ export function LoginScreen() {
         accessibilityRole="button"
         hitSlop={8}
         style={styles.forgotButton}
-        onPress={handleForgotPassword}
+        onPress={() => router.push("./forgot-password")}
       >
         <Text style={styles.forgotText}>Forgot password?</Text>
       </Pressable>
 
       {notice ? (
-        <Text style={[styles.notice, noticeType === "error" ? styles.noticeError : null]}>
+        <Text
+          style={[
+            styles.notice,
+            noticeType === "error" ? styles.noticeError : null,
+          ]}
+        >
           {notice}
         </Text>
       ) : null}

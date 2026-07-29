@@ -40,3 +40,11 @@ export type LoginRequest = {
   email: string;
   password: string;
 };
+
+export type ForgotPasswordRequest = {
+  email: string;
+};
+
+export type ForgotPasswordResponse = {
+  message: string;
+};

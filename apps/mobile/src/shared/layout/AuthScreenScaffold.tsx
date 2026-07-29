@@ -9,7 +9,7 @@ import { colors, radii, spacing, typography } from "@/shared/theme";
 type AuthScreenScaffoldProps = PropsWithChildren<{
   title: string;
   subtitle: string;
-  variant?: "login" | "register";
+  variant?: "login" | "register" | "recovery";
 }>;
 
 export function AuthScreenScaffold({
@@ -19,7 +19,10 @@ export function AuthScreenScaffold({
   children,
 }: AuthScreenScaffoldProps) {
   return (
-    <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
+    <ScreenContainer
+      backgroundColor={colors.backgroundWarm}
+      contentStyle={styles.content}
+    >
       <View style={styles.brandRow}>
         <View style={styles.logoMark}>
           <Ionicons name="book-outline" size={29} color={colors.white} />
@@ -33,7 +36,13 @@ export function AuthScreenScaffold({
         <View style={[styles.spark, styles.sparkRight]} />
         <View style={styles.avatarHead}>
           <Ionicons
-            name={variant === "login" ? "person-outline" : "school-outline"}
+            name={
+              variant === "register"
+                ? "school-outline"
+                : variant === "recovery"
+                  ? "key-outline"
+                  : "person-outline"
+            }
             size={56}
             color={colors.navy}
           />

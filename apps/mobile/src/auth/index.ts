@@ -1,5 +1,17 @@
 export { authClient } from "./auth-client";
-export { clearAccessToken, getAccessToken, setAccessToken } from "./access-token-memory";
+export {
+  configureAuthSessionHandlers,
+  getSuccessfulAuthRefreshVersion,
+  invalidateAuthSession,
+  requestAuthSessionRefresh,
+} from "./refresh-manager";
+export {
+  beginAccessTokenSession,
+  clearAccessToken,
+  getAccessToken,
+  getAccessTokenSessionVersion,
+  setAccessToken,
+} from "./access-token-memory";
 export {
   clearStoredRefreshToken,
   getStoredRefreshToken,

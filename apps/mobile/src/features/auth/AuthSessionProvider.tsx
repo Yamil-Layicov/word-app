@@ -5,12 +5,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
+  beginAccessTokenSession,
   clearAccessToken,
   clearStoredRefreshToken,
+  configureAuthSessionHandlers,
   getStoredRefreshToken,
   saveRefreshToken,
   setAccessToken,
@@ -46,37 +49,107 @@ let restorePromise: Promise<AuthTokensResponse | null> | null = null;
 export function AuthSessionProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<AuthSessionStatus>("restoring");
   const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const sessionRevision = useRef(0);
+
+  const invalidateSession = useCallback(async () => {
+    sessionRevision.current += 1;
+    clearAccessToken();
+    queryClient.clear();
+    setStatus("unauthenticated");
+
+    await clearStoredRefreshToken().catch((error: unknown) => {
+      logSessionWarning("Stored refresh token could not be cleared", error);
+    });
+  }, []);
 
   const startSession = useCallback(async (response: AuthTokensResponse) => {
-    await saveRefreshToken(response.refreshToken);
-    applyAuthenticatedSession(response);
+    const revision = sessionRevision.current + 1;
+    sessionRevision.current = revision;
+
+    try {
+      await saveRefreshToken(response.refreshToken);
+    } catch (error) {
+      await revokeServerSession(response.refreshToken);
+      throw error;
+    }
+
+    if (revision !== sessionRevision.current) {
+      await revokeServerSession(response.refreshToken);
+      throw new Error("The auth session changed while it was starting.");
+    }
+
+    beginAuthenticatedSession(response);
     setStatus("authenticated");
   }, []);
 
   const endSession = useCallback(async (options: EndSessionOptions = {}) => {
     const refreshTokenPromise = getStoredRefreshToken();
 
-    clearAccessToken();
-    queryClient.clear();
-    setStatus("unauthenticated");
-
     const refreshToken = await refreshTokenPromise.catch(() => null);
-
-    await clearStoredRefreshToken().catch((error: unknown) => {
-      logSessionWarning("Stored refresh token could not be cleared", error);
-    });
+    await invalidateSession();
 
     if (options.revokeServerSession !== false && refreshToken) {
       await logoutSession({ refreshToken }).catch((error: unknown) => {
         logSessionWarning("Server session could not be revoked", error);
       });
     }
-  }, []);
+  }, [invalidateSession]);
+
+  const refreshCurrentSession = useCallback(async () => {
+    const revision = sessionRevision.current;
+    const refreshToken = await getStoredRefreshToken();
+
+    if (!refreshToken) {
+      await invalidateSession();
+      throw new Error("The auth session does not have a refresh token.");
+    }
+
+    let response: AuthTokensResponse;
+
+    try {
+      response = await refreshSession({ refreshToken });
+    } catch (error) {
+      if (isRejectedRefreshToken(error)) {
+        await invalidateSession();
+      }
+
+      throw error;
+    }
+
+    if (revision !== sessionRevision.current) {
+      await revokeServerSession(response.refreshToken);
+      throw new Error("The auth session changed while it was refreshing.");
+    }
+
+    try {
+      await saveRefreshToken(response.refreshToken);
+    } catch (error) {
+      await invalidateSession();
+      throw error;
+    }
+
+    if (revision !== sessionRevision.current) {
+      await revokeServerSession(response.refreshToken);
+      throw new Error("The auth session changed while it was refreshing.");
+    }
+
+    applyRefreshedSession(response);
+    setStatus("authenticated");
+  }, [invalidateSession]);
 
   const retryRestore = useCallback(() => {
     setStatus("restoring");
     setRestoreAttempt((current) => current + 1);
   }, []);
+
+  useEffect(
+    () =>
+      configureAuthSessionHandlers({
+        refresh: refreshCurrentSession,
+        invalidate: invalidateSession,
+      }),
+    [invalidateSession, refreshCurrentSession],
+  );
 
   useEffect(() => {
     let active = true;
@@ -92,7 +165,7 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
           return;
         }
 
-        applyAuthenticatedSession(response);
+        beginAuthenticatedSession(response);
         setStatus("authenticated");
       })
       .catch((error: unknown) => {
@@ -164,8 +237,8 @@ function isRejectedRefreshToken(error: unknown): boolean {
   return isApiError(error) && [400, 401, 403].includes(error.status);
 }
 
-function applyAuthenticatedSession(response: AuthTokensResponse): void {
-  setAccessToken(response.accessToken);
+function beginAuthenticatedSession(response: AuthTokensResponse): void {
+  beginAccessTokenSession(response.accessToken);
   queryClient.setQueryData(authQueryKeys.me(), response.user);
 
   void syncCurrentDevicePushToken().catch((error: unknown) => {
@@ -173,8 +246,19 @@ function applyAuthenticatedSession(response: AuthTokensResponse): void {
   });
 }
 
+function applyRefreshedSession(response: AuthTokensResponse): void {
+  setAccessToken(response.accessToken);
+  queryClient.setQueryData(authQueryKeys.me(), response.user);
+}
+
 function logSessionWarning(message: string, error: unknown): void {
   if (__DEV__) {
     console.warn(message, error);
   }
+}
+
+async function revokeServerSession(refreshToken: string): Promise<void> {
+  await logoutSession({ refreshToken }).catch((error: unknown) => {
+    logSessionWarning("Superseded server session could not be revoked", error);
+  });
 }

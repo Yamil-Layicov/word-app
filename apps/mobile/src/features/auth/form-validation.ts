@@ -1,4 +1,4 @@
-import type { LoginRequest } from "./model";
+import type { LoginRequest, ResetPasswordRequest } from "./model";
 import type { RegisterDraft } from "./register-draft";
 
 export type LoginFormValues = {
@@ -17,6 +17,18 @@ export type ForgotPasswordFormValues = {
 
 export type ForgotPasswordFormErrors = {
   email?: string;
+};
+
+export type ResetPasswordFormValues = {
+  token: string;
+  password: string;
+  confirmPassword: string;
+};
+
+export type ResetPasswordFormErrors = {
+  token?: string;
+  password?: string;
+  confirmPassword?: string;
 };
 
 export type RegisterFormValues = {
@@ -46,6 +58,7 @@ type FormValidationResult<TData, TErrors> =
     };
 
 const EMAIL_PATTERN = /^\S+@\S+\.\S+$/;
+const PASSWORD_RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const MIN_PASSWORD_LENGTH = 8;
 
 export function validateLoginForm(
@@ -91,6 +104,45 @@ export function validateForgotPasswordForm(
       email: normalizeEmail(values.email),
     },
   };
+}
+
+export function validateResetPasswordForm(
+  values: ResetPasswordFormValues,
+): FormValidationResult<ResetPasswordRequest, ResetPasswordFormErrors> {
+  const errors: ResetPasswordFormErrors = {};
+  const token = values.token.trim();
+
+  if (!isValidPasswordResetToken(token)) {
+    errors.token = "This password reset link is invalid or incomplete.";
+  }
+
+  if (!values.password) {
+    errors.password = "Password is required.";
+  } else if (values.password.length < MIN_PASSWORD_LENGTH) {
+    errors.password = "Password must be at least 8 characters.";
+  }
+
+  if (!values.confirmPassword) {
+    errors.confirmPassword = "Confirm your password.";
+  } else if (values.confirmPassword !== values.password) {
+    errors.confirmPassword = "Passwords do not match.";
+  }
+
+  if (hasErrors(errors)) {
+    return { success: false, errors };
+  }
+
+  return {
+    success: true,
+    data: {
+      token,
+      newPassword: values.password,
+    },
+  };
+}
+
+export function isValidPasswordResetToken(token: string): boolean {
+  return PASSWORD_RESET_TOKEN_PATTERN.test(token.trim());
 }
 
 export function validateRegisterForm(

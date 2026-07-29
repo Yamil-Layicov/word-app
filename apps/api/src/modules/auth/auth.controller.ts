@@ -16,6 +16,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AccessTokenGuard } from './guards/access-token.guard';
 import { PasswordResetService } from './password-reset.service';
 
@@ -55,6 +56,15 @@ export class AuthController {
   @HttpCode(HttpStatus.ACCEPTED)
   forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
     return this.passwordResetService.request(forgotPasswordDto.email);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.passwordResetService.reset(
+      resetPasswordDto.token,
+      resetPasswordDto.newPassword,
+    );
   }
 
   @Post('refresh')

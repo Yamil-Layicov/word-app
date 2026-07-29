@@ -13,6 +13,7 @@ import { PasswordResetLinkService } from './password-reset-link.service';
 import { PasswordResetRepository } from './password-reset.repository';
 import { PasswordResetService } from './password-reset.service';
 import { PasswordResetTokenService } from './password-reset-token.service';
+import { PasswordService } from './password.service';
 
 @Module({
   imports: [JwtModule.register({})],
@@ -26,6 +27,7 @@ import { PasswordResetTokenService } from './password-reset-token.service';
     PasswordResetRepository,
     PasswordResetService,
     PasswordResetTokenService,
+    PasswordService,
     AccessTokenGuard,
     {
       provide: PASSWORD_RESET_EMAIL_GATEWAY,

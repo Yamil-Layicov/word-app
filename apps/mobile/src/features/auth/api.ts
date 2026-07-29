@@ -8,6 +8,8 @@ import type {
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
 } from "./model";
 
 export function register(input: RegisterRequest) {
@@ -23,6 +25,10 @@ export function requestPasswordReset(input: ForgotPasswordRequest) {
     "/auth/forgot-password",
     input,
   );
+}
+
+export function resetPassword(input: ResetPasswordRequest) {
+  return baseClient.post<ResetPasswordResponse>("/auth/reset-password", input);
 }
 
 export function refreshSession(input: RefreshTokenRequest) {

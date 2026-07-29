@@ -129,6 +129,20 @@ describe("LoginScreen", () => {
     ).toBeTruthy();
   });
 
+  it("shows the password-reset notice passed by recovery", () => {
+    useLocalSearchParamsMock.mockReturnValue({
+      notice: "password-reset",
+    });
+
+    render(<LoginScreen />);
+
+    expect(
+      screen.getByText(
+        "Your password was reset. Log in with your new password.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("opens the forgot-password route", () => {
     render(<LoginScreen />);
 

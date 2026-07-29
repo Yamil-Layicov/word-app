@@ -1,5 +1,6 @@
 export const AUTH_ROUTE_NOTICE = {
   accountCreated: "account-created",
+  passwordReset: "password-reset",
 } as const;
 
 export function getAuthRouteNoticeMessage(
@@ -10,6 +11,8 @@ export function getAuthRouteNoticeMessage(
   switch (notice) {
     case AUTH_ROUTE_NOTICE.accountCreated:
       return "Your account was created. Log in to continue.";
+    case AUTH_ROUTE_NOTICE.passwordReset:
+      return "Your password was reset. Log in with your new password.";
     default:
       return null;
   }

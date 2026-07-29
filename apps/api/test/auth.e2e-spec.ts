@@ -17,7 +17,16 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
-import { PASSWORD_RESET_REQUEST_MESSAGE } from '../src/modules/auth/password-reset.service';
+import {
+  PASSWORD_RESET_EMAIL_GATEWAY,
+  type PasswordResetEmailGateway,
+  type PasswordResetEmailMessage,
+} from '../src/modules/auth/password-reset-email.gateway';
+import {
+  INVALID_PASSWORD_RESET_TOKEN_MESSAGE,
+  PASSWORD_RESET_REQUEST_MESSAGE,
+  PASSWORD_RESET_SUCCESS_MESSAGE,
+} from '../src/modules/auth/password-reset.service';
 import {
   expectAuthResponseBody,
   expectObject,
@@ -61,6 +70,17 @@ describe('AuthController (e2e)', () => {
   const runId = `${Date.now()}`;
   const password = 'password123';
   const createdEmails: string[] = [];
+  const resetEmails: PasswordResetEmailMessage[] = [];
+
+  const passwordResetEmailGateway: PasswordResetEmailGateway = {
+    send: jest.fn((message: PasswordResetEmailMessage) => {
+      resetEmails.push(message);
+
+      return Promise.resolve({
+        providerMessageId: `test-message-${resetEmails.length}`,
+      });
+    }),
+  };
 
   /**
    * Testlər üçün unique email yaradırıq.
@@ -86,6 +106,24 @@ describe('AuthController (e2e)', () => {
       displayName: 'Auth E2E User',
       languagePairId,
     };
+  }
+
+  function getPasswordResetToken(email: string): string {
+    const message = [...resetEmails]
+      .reverse()
+      .find((candidate) => candidate.to === email);
+
+    if (!message) {
+      throw new Error(`Password reset email was not captured for ${email}`);
+    }
+
+    const token = new URL(message.resetUrl).searchParams.get('token');
+
+    if (!token) {
+      throw new Error('Password reset email does not contain a token');
+    }
+
+    return token;
   }
 
   /**
@@ -128,7 +166,10 @@ describe('AuthController (e2e)', () => {
      */
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PASSWORD_RESET_EMAIL_GATEWAY)
+      .useValue(passwordResetEmailGateway)
+      .compile();
 
     app = moduleFixture.createNestApplication();
 
@@ -359,6 +400,181 @@ describe('AuthController (e2e)', () => {
       revokedAt: null,
     });
     expect(currentTokens[0]?.tokenHash).not.toBe(firstToken.tokenHash);
+  });
+
+  it('should reject an invalid reset-password payload', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({
+        token: 'invalid-token',
+        newPassword: 'short',
+      })
+      .expect(400);
+  });
+
+  it('should reset the password once and revoke existing refresh sessions', async () => {
+    const authBody = await registerAndLoginTestUser('reset-password-success');
+    const newPassword = 'new-password-123';
+
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({
+        email: authBody.email,
+      })
+      .expect(202);
+
+    const rawToken = getPasswordResetToken(authBody.email);
+    const resetResponse = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({
+        token: rawToken,
+        newPassword,
+      })
+      .expect(200);
+
+    expect(resetResponse.body).toEqual({
+      message: PASSWORD_RESET_SUCCESS_MESSAGE,
+    });
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({
+        refreshToken: authBody.refreshToken,
+      })
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        email: authBody.email,
+        password,
+      })
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        email: authBody.email,
+        password: newPassword,
+      })
+      .expect(201);
+
+    const reusedTokenResponse = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({
+        token: rawToken,
+        newPassword: 'another-password-123',
+      })
+      .expect(400);
+
+    expect(reusedTokenResponse.body).toMatchObject({
+      message: INVALID_PASSWORD_RESET_TOKEN_MESSAGE,
+    });
+  });
+
+  it('should allow only one concurrent reset for the same token', async () => {
+    const email = makeEmail('reset-password-concurrent');
+    const candidatePasswords = [
+      'concurrent-password-a',
+      'concurrent-password-b',
+    ];
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(makeRegisterBody(email))
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({
+        email,
+      })
+      .expect(202);
+
+    const rawToken = getPasswordResetToken(email);
+    const resetResponses = await Promise.all(
+      candidatePasswords.map((newPassword) =>
+        request(app.getHttpServer()).post('/auth/reset-password').send({
+          token: rawToken,
+          newPassword,
+        }),
+      ),
+    );
+
+    expect(resetResponses.map(({ status }) => status).sort()).toEqual([
+      200, 400,
+    ]);
+
+    const loginResponses = await Promise.all(
+      candidatePasswords.map((candidatePassword) =>
+        request(app.getHttpServer()).post('/auth/login').send({
+          email,
+          password: candidatePassword,
+        }),
+      ),
+    );
+
+    expect(loginResponses.map(({ status }) => status).sort()).toEqual([
+      201, 401,
+    ]);
+  });
+
+  it('should return the same safe error for expired and unknown reset tokens', async () => {
+    const email = makeEmail('reset-password-expired');
+    createdEmails.push(email);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(makeRegisterBody(email))
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({
+        email,
+      })
+      .expect(202);
+
+    const rawToken = getPasswordResetToken(email);
+    const user = await prisma.user.findUniqueOrThrow({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await prisma.passwordResetToken.update({
+      where: {
+        userId: user.id,
+      },
+      data: {
+        expiresAt: new Date(Date.now() - 1_000),
+      },
+    });
+
+    const expiredResponse = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({
+        token: rawToken,
+        newPassword: 'new-password-123',
+      })
+      .expect(400);
+    const unknownResponse = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({
+        token: 'a'.repeat(43),
+        newPassword: 'new-password-123',
+      })
+      .expect(400);
+
+    expect(expiredResponse.body).toMatchObject({
+      message: INVALID_PASSWORD_RESET_TOKEN_MESSAGE,
+    });
+    expect(unknownResponse.body).toMatchObject({
+      message: INVALID_PASSWORD_RESET_TOKEN_MESSAGE,
+    });
   });
 
   /**

@@ -4,6 +4,7 @@ import {
   validateForgotPasswordForm,
   validateLoginForm,
   validateRegisterForm,
+  validateResetPasswordForm,
 } from "../form-validation";
 
 describe("validateForgotPasswordForm", () => {
@@ -74,6 +75,59 @@ describe("validateLoginForm", () => {
       data: {
         email: "user@example.com",
         password: " password ",
+      },
+    });
+  });
+});
+
+describe("validateResetPasswordForm", () => {
+  const token = "a".repeat(43);
+
+  it("rejects an invalid link and an empty password form", () => {
+    expect(
+      validateResetPasswordForm({
+        token: "invalid-token",
+        password: "",
+        confirmPassword: "",
+      }),
+    ).toEqual({
+      success: false,
+      errors: {
+        token: "This password reset link is invalid or incomplete.",
+        password: "Password is required.",
+        confirmPassword: "Confirm your password.",
+      },
+    });
+  });
+
+  it("rejects a short or mismatched password", () => {
+    expect(
+      validateResetPasswordForm({
+        token,
+        password: "short",
+        confirmPassword: "different",
+      }),
+    ).toEqual({
+      success: false,
+      errors: {
+        password: "Password must be at least 8 characters.",
+        confirmPassword: "Passwords do not match.",
+      },
+    });
+  });
+
+  it("returns the API request for a valid form", () => {
+    expect(
+      validateResetPasswordForm({
+        token: ` ${token} `,
+        password: "new-password",
+        confirmPassword: "new-password",
+      }),
+    ).toEqual({
+      success: true,
+      data: {
+        token,
+        newPassword: "new-password",
       },
     });
   });

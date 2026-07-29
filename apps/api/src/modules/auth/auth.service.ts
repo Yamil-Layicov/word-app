@@ -5,9 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { UserStatus } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
 import { ClockService } from '../../common/time/clock.service';
 import { AuthTokenService } from './auth-token.service';
 import { toAuthLoginResponse, toAuthUserResponse } from './auth.mapper';
@@ -21,12 +19,13 @@ import type {
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { PasswordService } from './password.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly authRepository: AuthRepository,
-    private readonly configService: ConfigService,
+    private readonly passwordService: PasswordService,
     private readonly authTokenService: AuthTokenService,
     private readonly clockService: ClockService,
   ) {}
@@ -60,7 +59,7 @@ export class AuthService {
       }
     }
 
-    const passwordHash = await this.hashPassword(registerDto.password);
+    const passwordHash = await this.passwordService.hash(registerDto.password);
 
     const user = await this.authRepository.createUserWithProfile({
       email,
@@ -98,7 +97,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isPasswordValid = await bcrypt.compare(
+    const isPasswordValid = await this.passwordService.verify(
       loginDto.password,
       user.passwordHash,
     );
@@ -234,26 +233,5 @@ export class AuthService {
 
   private normalizeCountryCode(countryCode: string): string {
     return countryCode.toUpperCase().trim();
-  }
-
-  private async hashPassword(password: string): Promise<string> {
-    const saltRounds = this.getBcryptSaltRounds();
-
-    return bcrypt.hash(password, saltRounds);
-  }
-
-  private getBcryptSaltRounds(): number {
-    const rawSaltRounds = this.configService.get<string>(
-      'BCRYPT_SALT_ROUNDS',
-      '10',
-    );
-
-    const saltRounds = Number(rawSaltRounds);
-
-    if (!Number.isInteger(saltRounds) || saltRounds < 8) {
-      throw new Error('BCRYPT_SALT_ROUNDS must be an integer greater than 7');
-    }
-
-    return saltRounds;
   }
 }

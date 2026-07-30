@@ -7,19 +7,28 @@ import {
   validateForgotPasswordForm,
   type ForgotPasswordFormErrors,
 } from "@/features/auth";
-import { isApiError } from "@/shared/api/http-error";
+import { getApiRetryAfterSeconds, isApiError } from "@/shared/api/http-error";
+import {
+  formatRetryAfterDuration,
+  useRetryAfterCountdown,
+} from "@/shared/hooks/useRetryAfterCountdown";
 import { AuthScreenScaffold } from "@/shared/layout/AuthScreenScaffold";
 import { colors, spacing, typography } from "@/shared/theme";
 import { Button, TextField } from "@/shared/ui";
 
 export function ForgotPasswordScreen() {
   const requestPasswordResetMutation = useRequestPasswordReset();
+  const retryAfterCountdown = useRetryAfterCountdown();
   const [email, setEmail] = useState("");
   const [errors, setErrors] = useState<ForgotPasswordFormErrors>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeType, setNoticeType] = useState<"success" | "error">("success");
 
   const handleSubmit = async () => {
+    if (retryAfterCountdown.isActive) {
+      return;
+    }
+
     const validation = validateForgotPasswordForm({ email });
     setNotice(null);
 
@@ -38,6 +47,12 @@ export function ForgotPasswordScreen() {
       setNoticeType("success");
       setNotice(response.message);
     } catch (error) {
+      const retryAfterSeconds = getApiRetryAfterSeconds(error);
+
+      if (retryAfterSeconds !== null) {
+        retryAfterCountdown.start(retryAfterSeconds);
+      }
+
       setNoticeType("error");
       setNotice(
         isApiError(error)
@@ -89,9 +104,17 @@ export function ForgotPasswordScreen() {
       ) : null}
 
       <Button
-        disabled={requestPasswordResetMutation.isPending}
+        disabled={
+          requestPasswordResetMutation.isPending || retryAfterCountdown.isActive
+        }
         loading={requestPasswordResetMutation.isPending}
-        title="Send reset link"
+        title={
+          retryAfterCountdown.isActive
+            ? `Try again in ${formatRetryAfterDuration(
+                retryAfterCountdown.remainingSeconds,
+              )}`
+            : "Send reset link"
+        }
         onPress={handleSubmit}
       />
 

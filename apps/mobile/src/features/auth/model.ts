@@ -43,6 +43,41 @@ export type LoginRequest = {
   password: string;
 };
 
+export const GOOGLE_AUTH_STATUS = {
+  authenticated: "AUTHENTICATED",
+  onboardingRequired: "ONBOARDING_REQUIRED",
+} as const;
+
+export type GoogleAuthProfile = {
+  email: string;
+  displayName?: string;
+  pictureUrl?: string;
+};
+
+export type GoogleAuthRequest = {
+  idToken: string;
+  languagePairId?: string;
+};
+
+export type GoogleAuthOnboardingResponse = {
+  status: typeof GOOGLE_AUTH_STATUS.onboardingRequired;
+  profile: GoogleAuthProfile;
+};
+
+export type GoogleAuthAuthenticatedResponse = AuthTokensResponse & {
+  status: typeof GOOGLE_AUTH_STATUS.authenticated;
+};
+
+export type GoogleAuthResponse =
+  | GoogleAuthOnboardingResponse
+  | GoogleAuthAuthenticatedResponse;
+
+export function isGoogleAuthAuthenticated(
+  response: GoogleAuthResponse,
+): response is GoogleAuthAuthenticatedResponse {
+  return response.status === GOOGLE_AUTH_STATUS.authenticated;
+}
+
 export type ForgotPasswordRequest = {
   email: string;
 };

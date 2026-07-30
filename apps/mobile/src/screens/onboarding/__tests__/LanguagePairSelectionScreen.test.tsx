@@ -10,12 +10,19 @@ import {
 import { useRouter } from "expo-router";
 
 import {
+  clearGoogleAuthDraft,
   clearRegisterDraft,
+  getGoogleAuthDraft,
   getRegisterDraft,
+  saveGoogleAuthDraft,
   saveRegisterDraft,
+  useGoogleAuth,
   useRegister,
+  useStartSession,
+  type GoogleAuthAuthenticatedResponse,
   type RegisterResponse,
 } from "@/features/auth";
+import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { useLanguagePairsQuery, type LanguagePair } from "@/entities/lookups";
 import { ApiError } from "@/shared/api/http-error";
 import { LanguagePairSelectionScreen } from "../LanguagePairSelectionScreen";
@@ -36,17 +43,31 @@ jest.mock("@/entities/lookups", () => ({
 jest.mock("@/features/auth", () => ({
   ...jest.requireActual("@/features/auth/auth-route-notice"),
   ...jest.requireActual("@/features/auth/register-draft"),
+  ...jest.requireActual("@/features/auth/google-auth-draft"),
+  ...jest.requireActual("@/features/auth/model"),
+  useGoogleAuth: jest.fn(),
   useRegister: jest.fn(),
+  useStartSession: jest.fn(),
+}));
+
+jest.mock("@/features/push-notifications", () => ({
+  consumePendingNotificationDestination: jest.fn(),
 }));
 
 const useRouterMock = useRouter as jest.Mock;
 const useLanguagePairsQueryMock = useLanguagePairsQuery as jest.Mock;
 const useRegisterMock = useRegister as jest.Mock;
+const useGoogleAuthMock = useGoogleAuth as jest.Mock;
+const useStartSessionMock = useStartSession as jest.Mock;
+const consumePendingDestinationMock =
+  consumePendingNotificationDestination as jest.Mock;
 
 const router = {
   replace: jest.fn(),
 };
 const register = jest.fn();
+const googleAuth = jest.fn();
+const startSession = jest.fn();
 const refetch = jest.fn();
 
 const languagePair: LanguagePair = {
@@ -74,17 +95,33 @@ const registerResponse: RegisterResponse = {
   createdAt: "2026-07-29T00:00:00.000Z",
 };
 
+const googleAuthResponse: GoogleAuthAuthenticatedResponse = {
+  accessToken: "access-token",
+  refreshToken: "refresh-token",
+  status: "AUTHENTICATED",
+  user: registerResponse,
+};
+
 describe("LanguagePairSelectionScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     register.mockReset();
+    googleAuth.mockReset();
+    startSession.mockReset();
     refetch.mockReset();
     clearRegisterDraft();
+    clearGoogleAuthDraft();
     useRouterMock.mockReturnValue(router);
     useRegisterMock.mockReturnValue({
       mutateAsync: register,
       isPending: false,
     });
+    useGoogleAuthMock.mockReturnValue({
+      mutateAsync: googleAuth,
+      isPending: false,
+    });
+    useStartSessionMock.mockReturnValue(startSession);
+    consumePendingDestinationMock.mockReturnValue(null);
     useLanguagePairsQueryMock.mockReturnValue({
       data: [languagePair],
       isError: false,
@@ -95,6 +132,7 @@ describe("LanguagePairSelectionScreen", () => {
 
   afterEach(() => {
     clearRegisterDraft();
+    clearGoogleAuthDraft();
   });
 
   it("shows loading and API error states with a working retry", () => {
@@ -155,6 +193,29 @@ describe("LanguagePairSelectionScreen", () => {
     });
   });
 
+  it("disables registration while a rate-limit countdown is active", async () => {
+    saveDraft();
+    register.mockRejectedValue(
+      new ApiError({
+        status: 429,
+        message: "Too many attempts. Try again later.",
+        retryAfterSeconds: 3_600,
+      }),
+    );
+    render(<LanguagePairSelectionScreen />);
+
+    selectLanguagePair();
+    fireEvent.press(screen.getByRole("button", { name: "Create account" }));
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Try again in 1:00:00",
+      }),
+    ).toBeDisabled();
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(getRegisterDraft()).not.toBeNull();
+  });
+
   it("clears the draft and opens email verification after registration", async () => {
     saveDraft();
     register.mockResolvedValue(registerResponse);
@@ -179,6 +240,33 @@ describe("LanguagePairSelectionScreen", () => {
     });
     expect(register).toHaveBeenCalledTimes(1);
     expect(getRegisterDraft()).toBeNull();
+  });
+
+  it("finishes Google onboarding and starts the authenticated session", async () => {
+    saveGoogleAuthDraft({
+      idToken: "google-id-token",
+      profile: {
+        email: "google@example.com",
+        displayName: "Google User",
+      },
+    });
+    googleAuth.mockResolvedValue(googleAuthResponse);
+    startSession.mockResolvedValue(undefined);
+    render(<LanguagePairSelectionScreen />);
+
+    selectLanguagePair();
+    fireEvent.press(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(googleAuth).toHaveBeenCalledWith({
+        idToken: "google-id-token",
+        languagePairId: "pair-1",
+      });
+      expect(startSession).toHaveBeenCalledWith(googleAuthResponse);
+      expect(router.replace).toHaveBeenCalledWith("/(app)");
+    });
+    expect(getGoogleAuthDraft()).toBeNull();
+    expect(register).not.toHaveBeenCalled();
   });
 });
 

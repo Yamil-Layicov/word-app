@@ -11,6 +11,7 @@ import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button, TextField } from "@/shared/ui";
+import { ProfileLogoutSection } from "./ProfileLogoutSection";
 
 export function ProfileScreen() {
   const router = useRouter();
@@ -242,6 +243,8 @@ export function ProfileScreen() {
           onSetActive={() => void handleSetActiveLanguagePair(languagePair.languagePairId)}
         />
       ))}
+
+      <ProfileLogoutSection />
     </ScreenContainer>
   );
 }

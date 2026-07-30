@@ -7,12 +7,22 @@ import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
 import {
   buildRegisterRequest,
+  clearGoogleAuthDraft,
   clearRegisterDraft,
+  getGoogleAuthDraft,
   getRegisterDraft,
+  isGoogleAuthAuthenticated,
   saveRegisterLanguagePair,
+  useGoogleAuth,
   useRegister,
+  useStartSession,
 } from "@/features/auth";
-import { isApiError } from "@/shared/api/http-error";
+import { consumePendingNotificationDestination } from "@/features/push-notifications";
+import { getApiRetryAfterSeconds, isApiError } from "@/shared/api/http-error";
+import {
+  formatRetryAfterDuration,
+  useRetryAfterCountdown,
+} from "@/shared/hooks/useRetryAfterCountdown";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
@@ -20,7 +30,11 @@ import { Button } from "@/shared/ui";
 export function LanguagePairSelectionScreen() {
   const router = useRouter();
   const registerMutation = useRegister();
+  const googleAuthMutation = useGoogleAuth();
+  const startSession = useStartSession();
+  const retryAfterCountdown = useRetryAfterCountdown();
   const registerDraft = getRegisterDraft();
+  const googleAuthDraft = getGoogleAuthDraft();
   const [selectedLanguagePairId, setSelectedLanguagePairId] = useState<
     string | null
   >(registerDraft?.languagePairId ?? null);
@@ -37,13 +51,41 @@ export function LanguagePairSelectionScreen() {
   );
 
   const handleContinue = async () => {
-    if (!registerDraft) {
-      setNotice("Start from the register screen first.");
+    if (retryAfterCountdown.isActive) {
       return;
     }
 
     if (!selectedLanguagePair) {
       setNotice("Choose a language pair to continue.");
+      return;
+    }
+
+    if (googleAuthDraft) {
+      setNotice(null);
+
+      try {
+        const response = await googleAuthMutation.mutateAsync({
+          idToken: googleAuthDraft.idToken,
+          languagePairId: selectedLanguagePair.id,
+        });
+
+        if (!isGoogleAuthAuthenticated(response)) {
+          setNotice("Could not finish Google account setup.");
+          return;
+        }
+
+        await startSession(response);
+        clearGoogleAuthDraft();
+        clearRegisterDraft();
+        router.replace(consumePendingNotificationDestination() ?? "/(app)");
+      } catch (error) {
+        handleMutationError(error, "Could not finish Google account setup.");
+      }
+      return;
+    }
+
+    if (!registerDraft) {
+      setNotice("Start from the register screen first.");
       return;
     }
 
@@ -60,9 +102,7 @@ export function LanguagePairSelectionScreen() {
     try {
       await registerMutation.mutateAsync(registerRequest);
     } catch (error) {
-      setNotice(
-        isApiError(error) ? error.message : "Could not create your account.",
-      );
+      handleMutationError(error, "Could not create your account.");
       return;
     }
 
@@ -75,13 +115,29 @@ export function LanguagePairSelectionScreen() {
     });
   };
 
+  const handleMutationError = (error: unknown, fallbackMessage: string) => {
+    const retryAfterSeconds = getApiRetryAfterSeconds(error);
+
+    if (retryAfterSeconds !== null) {
+      retryAfterCountdown.start(retryAfterSeconds);
+    }
+
+    setNotice(isApiError(error) ? error.message : fallbackMessage);
+  };
+
+  const isPending =
+    registerMutation.isPending || googleAuthMutation.isPending;
+
   return (
     <ScreenContainer
       backgroundColor={colors.backgroundWarm}
       contentStyle={styles.content}
     >
       <View style={styles.topBar}>
-        <Link href="/register" style={styles.backLink}>
+        <Link
+          href={googleAuthDraft ? "/login" : "/register"}
+          style={styles.backLink}
+        >
           Back
         </Link>
       </View>
@@ -92,7 +148,9 @@ export function LanguagePairSelectionScreen() {
         </View>
         <Text style={styles.title}>Choose your languages</Text>
         <Text style={styles.subtitle}>
-          Pick the first language pair you want to learn with Word App.
+          {googleAuthDraft
+            ? `Choose the first language pair for ${googleAuthDraft.profile.email}.`
+            : "Pick the first language pair you want to learn with Word App."}
         </Text>
       </View>
 
@@ -135,9 +193,21 @@ export function LanguagePairSelectionScreen() {
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       <Button
-        disabled={!selectedLanguagePair || registerMutation.isPending}
-        loading={registerMutation.isPending}
-        title="Create account"
+        disabled={
+          !selectedLanguagePair ||
+          isPending ||
+          retryAfterCountdown.isActive
+        }
+        loading={isPending}
+        title={
+          retryAfterCountdown.isActive
+            ? `Try again in ${formatRetryAfterDuration(
+                retryAfterCountdown.remainingSeconds,
+              )}`
+            : googleAuthDraft
+              ? "Continue"
+              : "Create account"
+        }
         onPress={handleContinue}
       />
     </ScreenContainer>

@@ -1,5 +1,5 @@
 import { env } from "@/shared/config/env";
-import { toApiError } from "@/shared/api/http-error";
+import { parseRetryAfterSeconds, toApiError } from "@/shared/api/http-error";
 
 type QueryValue = string | number | boolean | null | undefined;
 type QueryParams = Record<string, QueryValue>;
@@ -22,7 +22,11 @@ async function request<TResponse>(
   const responseBody = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw toApiError(response.status, responseBody);
+    throw toApiError(
+      response.status,
+      responseBody,
+      parseRetryAfterSeconds(response.headers),
+    );
   }
 
   return responseBody as TResponse;

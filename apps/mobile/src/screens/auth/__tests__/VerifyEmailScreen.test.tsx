@@ -92,6 +92,28 @@ describe("VerifyEmailScreen", () => {
     });
   });
 
+  it("disables verification resend while rate limited", async () => {
+    requestEmail.mockRejectedValue(
+      new ApiError({
+        status: 429,
+        message: "Too many attempts. Try again later.",
+        retryAfterSeconds: 180,
+      }),
+    );
+    render(<VerifyEmailScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Resend verification email" }),
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Try again in 3:00",
+      }),
+    ).toBeDisabled();
+    expect(requestEmail).toHaveBeenCalledTimes(1);
+  });
+
   it("confirms a valid deep link once and returns to login", async () => {
     confirmEmail.mockResolvedValue({
       message: "Your email has been verified. You can now log in.",

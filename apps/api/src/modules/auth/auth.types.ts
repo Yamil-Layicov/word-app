@@ -18,7 +18,7 @@ export type AuthUserResponseModel = {
 };
 
 export type AuthUserForLogin = AuthUserResponseModel & {
-  passwordHash: string;
+  passwordHash: string | null;
   emailVerifiedAt: Date | null;
 };
 

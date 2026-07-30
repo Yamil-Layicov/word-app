@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
 import { ClockService } from '../../common/time/clock.service';
+import { AuthSessionIssuer } from './auth-session.issuer';
 import { AuthTokenService } from './auth-token.service';
 import { toAuthLoginResponse, toAuthUserResponse } from './auth.mapper';
 import { AuthRepository } from './auth.repository';
@@ -32,6 +33,7 @@ export class AuthService {
     private readonly authRepository: AuthRepository,
     private readonly passwordService: PasswordService,
     private readonly authTokenService: AuthTokenService,
+    private readonly authSessionIssuer: AuthSessionIssuer,
     private readonly clockService: ClockService,
     private readonly emailVerificationService: EmailVerificationService,
   ) {}
@@ -106,7 +108,7 @@ export class AuthService {
     const email = this.normalizeEmail(loginDto.email);
     const user = await this.authRepository.findUserForAuth(email);
 
-    if (!user) {
+    if (!user?.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -132,33 +134,7 @@ export class AuthService {
       });
     }
 
-    const sessionId = this.authTokenService.generateSessionId();
-    const refreshToken = this.authTokenService.generateRefreshToken(sessionId);
-    const refreshTokenHash =
-      this.authTokenService.hashRefreshToken(refreshToken);
-    const refreshTokenExpiresAt =
-      this.authTokenService.getRefreshTokenExpiresAt();
-
-    await this.authRepository.createAuthSession({
-      id: sessionId,
-      userId: user.id,
-      refreshTokenHash,
-      userAgent: context.userAgent,
-      ipAddress: context.ipAddress,
-      expiresAt: refreshTokenExpiresAt,
-    });
-
-    const accessToken = await this.authTokenService.generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
-    return toAuthLoginResponse({
-      accessToken,
-      refreshToken,
-      user,
-    });
+    return this.authSessionIssuer.issue(user, context);
   }
 
   async refresh(refreshTokenDto: RefreshTokenDto): Promise<AuthLoginResponse> {

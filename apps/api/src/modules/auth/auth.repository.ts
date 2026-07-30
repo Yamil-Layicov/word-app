@@ -6,6 +6,7 @@ import type {
   AuthUserResponseModel,
   CreatedAuthSession,
 } from './auth.types';
+import { authUserResponseSelect } from './auth.select';
 
 type EmailCheckResult = {
   id: string;
@@ -53,23 +54,6 @@ type RevokeAuthSessionInput = {
   refreshTokenHash: string;
   now: Date;
 };
-
-const authUserResponseSelect = {
-  id: true,
-  email: true,
-  role: true,
-  status: true,
-  createdAt: true,
-  profile: {
-    select: {
-      id: true,
-      displayName: true,
-      countryCode: true,
-      interfaceLanguage: true,
-      activeLanguagePairId: true,
-    },
-  },
-} as const;
 
 @Injectable()
 export class AuthRepository {

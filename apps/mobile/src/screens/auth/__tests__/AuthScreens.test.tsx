@@ -11,10 +11,16 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
   AUTH_API_ERROR_CODE,
+  clearGoogleAuthDraft,
+  isGoogleSignInSupported,
+  requestGoogleIdToken,
   saveRegisterDraft,
+  saveGoogleAuthDraft,
+  useGoogleAuth,
   useLogin,
   useStartSession,
   type AuthTokensResponse,
+  type GoogleAuthAuthenticatedResponse,
 } from "@/features/auth";
 import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { ApiError } from "@/shared/api/http-error";
@@ -35,7 +41,17 @@ jest.mock("@/features/auth", () => ({
   ...jest.requireActual("@/features/auth/auth-route-notice"),
   ...jest.requireActual("@/features/auth/auth-api-error-code"),
   ...jest.requireActual("@/features/auth/form-validation"),
+  ...jest.requireActual("@/features/auth/model"),
+  ...jest.requireActual(
+    "@/features/auth/google-sign-in/google-sign-in.types",
+  ),
+  clearGoogleAuthDraft: jest.fn(),
+  clearRegisterDraft: jest.fn(),
+  isGoogleSignInSupported: jest.fn(),
+  requestGoogleIdToken: jest.fn(),
+  saveGoogleAuthDraft: jest.fn(),
   saveRegisterDraft: jest.fn(),
+  useGoogleAuth: jest.fn(),
   useLogin: jest.fn(),
   useStartSession: jest.fn(),
 }));
@@ -47,7 +63,12 @@ jest.mock("@/features/push-notifications", () => ({
 const useRouterMock = useRouter as jest.Mock;
 const useLocalSearchParamsMock = useLocalSearchParams as jest.Mock;
 const useLoginMock = useLogin as jest.Mock;
+const useGoogleAuthMock = useGoogleAuth as jest.Mock;
 const useStartSessionMock = useStartSession as jest.Mock;
+const isGoogleSignInSupportedMock = isGoogleSignInSupported as jest.Mock;
+const requestGoogleIdTokenMock = requestGoogleIdToken as jest.Mock;
+const clearGoogleAuthDraftMock = clearGoogleAuthDraft as jest.Mock;
+const saveGoogleAuthDraftMock = saveGoogleAuthDraft as jest.Mock;
 const saveRegisterDraftMock = saveRegisterDraft as jest.Mock;
 const consumePendingDestinationMock =
   consumePendingNotificationDestination as jest.Mock;
@@ -57,6 +78,7 @@ const router = {
   replace: jest.fn(),
 };
 const login = jest.fn();
+const googleAuth = jest.fn();
 const startSession = jest.fn();
 
 const authResponse: AuthTokensResponse = {
@@ -72,10 +94,16 @@ const authResponse: AuthTokensResponse = {
   },
 };
 
+const googleAuthResponse: GoogleAuthAuthenticatedResponse = {
+  ...authResponse,
+  status: "AUTHENTICATED",
+};
+
 describe("LoginScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     login.mockReset();
+    googleAuth.mockReset();
     startSession.mockReset();
     useRouterMock.mockReturnValue(router);
     useLocalSearchParamsMock.mockReturnValue({});
@@ -83,7 +111,12 @@ describe("LoginScreen", () => {
       mutateAsync: login,
       isPending: false,
     });
+    useGoogleAuthMock.mockReturnValue({
+      mutateAsync: googleAuth,
+      isPending: false,
+    });
     useStartSessionMock.mockReturnValue(startSession);
+    isGoogleSignInSupportedMock.mockReturnValue(false);
     consumePendingDestinationMock.mockReturnValue(null);
   });
 
@@ -191,6 +224,43 @@ describe("LoginScreen", () => {
     expect(startSession).not.toHaveBeenCalled();
   });
 
+  it("disables login and shows the retry countdown after rate limiting", async () => {
+    login.mockRejectedValue(
+      new ApiError({
+        status: 429,
+        message: "Too many attempts. Try again later.",
+        response: {
+          statusCode: 429,
+          message: "Too many attempts. Try again later.",
+          error: "Too Many Requests",
+          code: "RATE_LIMIT_EXCEEDED",
+          retryAfterSeconds: 90,
+        },
+        retryAfterSeconds: 90,
+      }),
+    );
+    render(<LoginScreen />);
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText("Email address"),
+      "user@example.com",
+    );
+    fireEvent.changeText(screen.getByPlaceholderText("Password"), "password");
+    fireEvent.press(screen.getByRole("button", { name: "Log in" }));
+
+    const retryButton = await screen.findByRole("button", {
+      name: "Try again in 1:30",
+    });
+
+    expect(retryButton.props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    expect(
+      screen.getByText("Too many attempts. Try again later."),
+    ).toBeTruthy();
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
   it("opens the forgot-password route", () => {
     render(<LoginScreen />);
 
@@ -198,12 +268,87 @@ describe("LoginScreen", () => {
 
     expect(router.push).toHaveBeenCalledWith("./forgot-password");
   });
+
+  it("starts a session for an existing Google account", async () => {
+    isGoogleSignInSupportedMock.mockReturnValue(true);
+    requestGoogleIdTokenMock.mockResolvedValue({
+      status: "SUCCESS",
+      idToken: "google-id-token",
+    });
+    googleAuth.mockResolvedValue(googleAuthResponse);
+    startSession.mockResolvedValue(undefined);
+    render(<LoginScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    await waitFor(() => {
+      expect(googleAuth).toHaveBeenCalledWith({
+        idToken: "google-id-token",
+      });
+      expect(startSession).toHaveBeenCalledWith(googleAuthResponse);
+      expect(router.replace).toHaveBeenCalledWith("/(app)");
+    });
+    expect(clearGoogleAuthDraftMock).toHaveBeenCalled();
+  });
+
+  it("saves a temporary draft when Google onboarding is required", async () => {
+    isGoogleSignInSupportedMock.mockReturnValue(true);
+    requestGoogleIdTokenMock.mockResolvedValue({
+      status: "SUCCESS",
+      idToken: "google-id-token",
+    });
+    googleAuth.mockResolvedValue({
+      status: "ONBOARDING_REQUIRED",
+      profile: {
+        email: "google@example.com",
+        displayName: "Google User",
+      },
+    });
+    render(<LoginScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    await waitFor(() => {
+      expect(saveGoogleAuthDraftMock).toHaveBeenCalledWith({
+        idToken: "google-id-token",
+        profile: {
+          email: "google@example.com",
+          displayName: "Google User",
+        },
+      });
+      expect(router.push).toHaveBeenCalledWith("/language-pair");
+    });
+    expect(startSession).not.toHaveBeenCalled();
+  });
+
+  it("does not call the backend when Google sign-in is cancelled", async () => {
+    isGoogleSignInSupportedMock.mockReturnValue(true);
+    requestGoogleIdTokenMock.mockResolvedValue({
+      status: "CANCELLED",
+    });
+    render(<LoginScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    await waitFor(() => {
+      expect(requestGoogleIdTokenMock).toHaveBeenCalledTimes(1);
+    });
+    expect(googleAuth).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+  });
 });
 
 describe("RegisterScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     login.mockReset();
+    googleAuth.mockReset();
     startSession.mockReset();
     useRouterMock.mockReturnValue(router);
   });
@@ -248,6 +393,7 @@ describe("RegisterScreen", () => {
       email: "user@example.com",
       password: "password",
     });
+    expect(clearGoogleAuthDraftMock).toHaveBeenCalledTimes(1);
     expect(router.push).toHaveBeenCalledWith("/language-pair");
   });
 });

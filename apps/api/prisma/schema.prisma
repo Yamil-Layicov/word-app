@@ -25,6 +25,10 @@ enum UserStatus {
   DELETED
 }
 
+enum AuthProvider {
+  GOOGLE
+}
+
 enum CefrLevel {
   A1
   A2
@@ -104,7 +108,7 @@ enum PushPlatform {
 model User {
   id              String     @id @default(cuid())
   email           String     @unique
-  passwordHash    String
+  passwordHash    String?
   role            UserRole   @default(USER)
   status          UserStatus @default(ACTIVE)
   emailVerifiedAt DateTime?
@@ -115,6 +119,7 @@ model User {
   profile                 UserProfile?
   languagePairs           UserLanguagePair[]
   authSessions            AuthSession[]
+  identities              UserIdentity[]
   createdVocabularyItems  VocabularyItem[]         @relation("VocabularyItemCreator")
   userWords               UserWord[]
   reviewLogs              ReviewLog[]
@@ -124,6 +129,22 @@ model User {
   pushDeviceTokens        PushDeviceToken[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+}
+
+model UserIdentity {
+  id              String       @id @default(cuid())
+  userId          String
+  provider        AuthProvider
+  providerSubject String
+  emailAtLinkTime String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@unique([userId, provider])
+  @@index([userId])
 }
 
 model UserProfile {

@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react-native";
 
 import { useRequestPasswordReset } from "@/features/auth";
+import { ApiError } from "@/shared/api/http-error";
 import { ForgotPasswordScreen } from "../ForgotPasswordScreen";
 
 jest.mock("expo-router", () => ({
@@ -86,5 +87,29 @@ describe("ForgotPasswordScreen", () => {
         screen.getByText("Could not request a password reset."),
       ).toBeTruthy();
     });
+  });
+
+  it("disables resend while a rate-limit countdown is active", async () => {
+    requestPasswordReset.mockRejectedValue(
+      new ApiError({
+        status: 429,
+        message: "Too many attempts. Try again later.",
+        retryAfterSeconds: 120,
+      }),
+    );
+    render(<ForgotPasswordScreen />);
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText("Email address"),
+      "user@example.com",
+    );
+    fireEvent.press(screen.getByRole("button", { name: "Send reset link" }));
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Try again in 2:00",
+      }),
+    ).toBeDisabled();
+    expect(requestPasswordReset).toHaveBeenCalledTimes(1);
   });
 });

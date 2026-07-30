@@ -44,6 +44,7 @@ async function bootstrap() {
   app.enableCors({
     origin: true,
     credentials: true,
+    exposedHeaders: ['Retry-After-auth-ip', 'Retry-After-auth-identity'],
   });
 
   const port = configService.get<string>('PORT', '4000');
@@ -51,4 +52,4 @@ async function bootstrap() {
   await app.listen(Number(port));
 }
 
-bootstrap();
+void bootstrap();

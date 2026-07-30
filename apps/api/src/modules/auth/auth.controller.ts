@@ -14,6 +14,7 @@ import type { AuthenticatedUser, AuthRequestContext } from './auth.types';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ConfirmEmailVerificationDto } from './dto/confirm-email-verification.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -21,6 +22,7 @@ import { RequestEmailVerificationDto } from './dto/request-email-verification.dt
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { EmailVerificationService } from './email-verification.service';
 import { AccessTokenGuard } from './guards/access-token.guard';
+import { GoogleAuthService } from './google/google-auth.service';
 import { PasswordResetService } from './password-reset.service';
 import { AuthRateLimit } from './rate-limit/auth-rate-limit.decorator';
 
@@ -30,6 +32,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly passwordResetService: PasswordResetService,
     private readonly emailVerificationService: EmailVerificationService,
+    private readonly googleAuthService: GoogleAuthService,
   ) {}
 
   @Post('register')
@@ -57,6 +60,22 @@ export class AuthController {
     };
 
     return this.authService.login(loginDto, context);
+  }
+
+  @Post('google')
+  @AuthRateLimit('login')
+  @HttpCode(HttpStatus.OK)
+  google(
+    @Body() googleAuthDto: GoogleAuthDto,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ipAddress: string | undefined,
+  ) {
+    const context: AuthRequestContext = {
+      userAgent,
+      ipAddress,
+    };
+
+    return this.googleAuthService.authenticate(googleAuthDto, context);
   }
 
   @Post('forgot-password')

@@ -45,6 +45,7 @@ import {
 } from '../src/modules/auth/rate-limit/auth-rate-limit.constants';
 import {
   expectAuthResponseBody,
+  expectNumberField,
   expectObject,
   expectStringField,
   type AuthResponseBody,
@@ -964,12 +965,17 @@ describe('AuthController (e2e)', () => {
       })
       .expect(429);
 
-    expect(blockedResponse.body).toEqual({
+    const blockedBody = expectObject(blockedResponse.body as unknown);
+
+    expect(blockedBody).toMatchObject({
       statusCode: 429,
       message: AUTH_RATE_LIMIT_ERROR_MESSAGE,
       error: 'Too Many Requests',
       code: AUTH_RATE_LIMIT_ERROR_CODE,
     });
+    expect(expectNumberField(blockedBody, 'retryAfterSeconds')).toBeGreaterThan(
+      0,
+    );
     expect(blockedResponse.headers['retry-after-auth-identity']).toBeDefined();
 
     await request(app.getHttpServer())

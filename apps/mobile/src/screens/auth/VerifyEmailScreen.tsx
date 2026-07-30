@@ -8,7 +8,11 @@ import {
   useConfirmEmailVerification,
   useRequestEmailVerification,
 } from "@/features/auth";
-import { isApiError } from "@/shared/api/http-error";
+import { getApiRetryAfterSeconds, isApiError } from "@/shared/api/http-error";
+import {
+  formatRetryAfterDuration,
+  useRetryAfterCountdown,
+} from "@/shared/hooks/useRetryAfterCountdown";
 import { AuthScreenScaffold } from "@/shared/layout/AuthScreenScaffold";
 import { colors, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
@@ -24,6 +28,7 @@ export function VerifyEmailScreen() {
   }>();
   const confirmEmailMutation = useConfirmEmailVerification();
   const requestEmailMutation = useRequestEmailVerification();
+  const retryAfterCountdown = useRetryAfterCountdown();
   const confirmationStarted = useRef(false);
   const email = normalizeEmail(getFirstParam(params.email));
   const token = getFirstParam(params.token).trim();
@@ -65,7 +70,7 @@ export function VerifyEmailScreen() {
   }, [handleConfirm, hasValidToken]);
 
   const handleResend = async () => {
-    if (!email) {
+    if (!email || retryAfterCountdown.isActive) {
       return;
     }
 
@@ -77,6 +82,12 @@ export function VerifyEmailScreen() {
       setNoticeType("success");
       setNotice(response.message);
     } catch (error) {
+      const retryAfterSeconds = getApiRetryAfterSeconds(error);
+
+      if (retryAfterSeconds !== null) {
+        retryAfterCountdown.start(retryAfterSeconds);
+      }
+
       setNoticeType("error");
       setNotice(
         isApiError(error)
@@ -133,9 +144,17 @@ export function VerifyEmailScreen() {
 
       {!isConfirmationLink && email ? (
         <Button
-          disabled={requestEmailMutation.isPending}
+          disabled={
+            requestEmailMutation.isPending || retryAfterCountdown.isActive
+          }
           loading={requestEmailMutation.isPending}
-          title="Resend verification email"
+          title={
+            retryAfterCountdown.isActive
+              ? `Try again in ${formatRetryAfterDuration(
+                  retryAfterCountdown.remainingSeconds,
+                )}`
+              : "Resend verification email"
+          }
           variant="secondary"
           onPress={handleResend}
         />

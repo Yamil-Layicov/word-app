@@ -12,7 +12,20 @@
           "package_name": "com.yamillayicov.wordapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "610101175797-ld0tbfneqgqf7snhpabo49s3dajqgarv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.yamillayicov.wordapp",
+            "certificate_hash": "5969d4b057cc72b79f732308b4d3650cd39915de"
+          }
+        },
+        {
+          "client_id": "610101175797-pse9lc9si382a1gu6f3e1cfq6k9jdc8j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAx3bNYGB2Htk5mcTI5H2XvDUSNAWmDqDc"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "610101175797-pse9lc9si382a1gu6f3e1cfq6k9jdc8j.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

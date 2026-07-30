@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
+  clearGoogleAuthDraft,
   saveRegisterDraft,
   validateRegisterForm,
   type RegisterFormErrors,
@@ -35,6 +36,7 @@ export function RegisterScreen() {
     }
 
     setErrors({});
+    clearGoogleAuthDraft();
     saveRegisterDraft(validation.data);
     router.push("/language-pair");
   };

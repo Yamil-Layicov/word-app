@@ -7,6 +7,8 @@ import type {
   ConfirmEmailVerificationResponse,
   ForgotPasswordRequest,
   ForgotPasswordResponse,
+  GoogleAuthRequest,
+  GoogleAuthResponse,
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,
@@ -23,6 +25,10 @@ export function register(input: RegisterRequest) {
 
 export function login(input: LoginRequest) {
   return baseClient.post<AuthTokensResponse>("/auth/login", input);
+}
+
+export function authenticateWithGoogle(input: GoogleAuthRequest) {
+  return baseClient.post<GoogleAuthResponse>("/auth/google", input);
 }
 
 export function requestPasswordReset(input: ForgotPasswordRequest) {

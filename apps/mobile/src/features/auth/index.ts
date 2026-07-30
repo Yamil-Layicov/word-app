@@ -1,4 +1,5 @@
 export {
+  authenticateWithGoogle,
   confirmEmailVerification,
   getCurrentUser,
   login,
@@ -37,6 +38,7 @@ export {
   type ResetPasswordFormValues,
 } from "./form-validation";
 export { useLogin } from "./hooks/useLogin";
+export { useGoogleAuth } from "./hooks/useGoogleAuth";
 export { useConfirmEmailVerification } from "./hooks/useConfirmEmailVerification";
 export { useLogout } from "./hooks/useLogout";
 export { useRegister } from "./hooks/useRegister";
@@ -56,6 +58,23 @@ export {
   type CompleteRegisterDraft,
   type RegisterDraft,
 } from "./register-draft";
+export {
+  clearGoogleAuthDraft,
+  getGoogleAuthDraft,
+  saveGoogleAuthDraft,
+  type GoogleAuthDraft,
+} from "./google-auth-draft";
+export {
+  isGoogleSignInSupported,
+  requestGoogleIdToken,
+} from "./google-sign-in/google-sign-in-client";
+export {
+  getGoogleSignInErrorMessage,
+  GOOGLE_SIGN_IN_ERROR_CODE,
+  GoogleSignInClientError,
+  type GoogleIdTokenResult,
+  type GoogleSignInErrorCode,
+} from "./google-sign-in/google-sign-in.types";
 export type {
   AuthTokensResponse,
   AuthUser,
@@ -64,6 +83,11 @@ export type {
   ConfirmEmailVerificationResponse,
   ForgotPasswordRequest,
   ForgotPasswordResponse,
+  GoogleAuthAuthenticatedResponse,
+  GoogleAuthOnboardingResponse,
+  GoogleAuthProfile,
+  GoogleAuthRequest,
+  GoogleAuthResponse,
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,
@@ -74,4 +98,8 @@ export type {
   ResetPasswordResponse,
   UserRole,
   UserStatus,
+} from "./model";
+export {
+  GOOGLE_AUTH_STATUS,
+  isGoogleAuthAuthenticated,
 } from "./model";

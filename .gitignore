@@ -10,6 +10,7 @@ build
 coverage
 
 docs/
+AGENTS.md
 
 *.pem
 *.key

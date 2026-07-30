@@ -9,6 +9,8 @@ import type {
   ForgotPasswordResponse,
   GoogleAuthRequest,
   GoogleAuthResponse,
+  LinkedAuthIdentity,
+  LinkGoogleAccountRequest,
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,
@@ -29,6 +31,14 @@ export function login(input: LoginRequest) {
 
 export function authenticateWithGoogle(input: GoogleAuthRequest) {
   return baseClient.post<GoogleAuthResponse>("/auth/google", input);
+}
+
+export function getLinkedAuthIdentities() {
+  return authClient.get<LinkedAuthIdentity[]>("/auth/identities");
+}
+
+export function linkGoogleAccount(input: LinkGoogleAccountRequest) {
+  return authClient.post<LinkedAuthIdentity>("/auth/google/link", input);
 }
 
 export function requestPasswordReset(input: ForgotPasswordRequest) {

@@ -11,6 +11,7 @@ import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button, TextField } from "@/shared/ui";
+import { ProfileConnectedAccountsSection } from "./ProfileConnectedAccountsSection";
 import { ProfileLogoutSection } from "./ProfileLogoutSection";
 
 export function ProfileScreen() {
@@ -244,6 +245,7 @@ export function ProfileScreen() {
         />
       ))}
 
+      <ProfileConnectedAccountsSection />
       <ProfileLogoutSection />
     </ScreenContainer>
   );

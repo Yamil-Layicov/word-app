@@ -10,6 +10,10 @@ import { PrismaService } from '../src/database/prisma.service';
 import {
   GOOGLE_ACCOUNT_LINK_REQUIRED_CODE,
   GOOGLE_ACCOUNT_LINK_REQUIRED_MESSAGE,
+  GOOGLE_LINK_EMAIL_MISMATCH_CODE,
+  GOOGLE_LINK_EMAIL_MISMATCH_MESSAGE,
+  GOOGLE_PROVIDER_ALREADY_LINKED_CODE,
+  GOOGLE_PROVIDER_ALREADY_LINKED_MESSAGE,
 } from '../src/modules/auth/google/google-auth.service';
 import { GOOGLE_AUTH_STATUS } from '../src/modules/auth/google/google-auth.types';
 import {
@@ -17,11 +21,13 @@ import {
   type GoogleIdentityClaims,
   type GoogleIdTokenVerifier,
 } from '../src/modules/auth/google/google-id-token-verifier';
+import { PasswordService } from '../src/modules/auth/password.service';
 import { expectObject, expectStringField } from './helpers/response.helpers';
 
 describe('GoogleAuthController (e2e)', () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
+  let passwordService: PasswordService;
   let languagePairId: string;
   let sourceLanguageId: string;
   let targetLanguageId: string;
@@ -45,14 +51,19 @@ describe('GoogleAuthController (e2e)', () => {
     return Promise.resolve(claims);
   });
 
-  function addGoogleIdentity(label: string): {
+  function addGoogleIdentity(
+    label: string,
+    options?: {
+      email?: string;
+    },
+  ): {
     claims: GoogleIdentityClaims;
     idToken: string;
   } {
     const idToken = `google-token-${runId}-${label}`;
     const claims = {
       subject: `google-subject-${runId}-${label}`,
-      email: `${emailPrefix}-${label}@example.com`,
+      email: options?.email ?? `${emailPrefix}-${label}@example.com`,
       displayName: `Google ${label}`,
       pictureUrl: `https://example.com/${label}.png`,
     };
@@ -82,6 +93,53 @@ describe('GoogleAuthController (e2e)', () => {
       });
   }
 
+  function postGoogleLink(idToken: string, accessToken?: string) {
+    ipSequence += 1;
+    const pendingRequest = request(app.getHttpServer())
+      .post('/auth/google/link')
+      .set('X-Forwarded-For', `198.51.100.${ipSequence}`);
+
+    if (accessToken) {
+      pendingRequest.set('Authorization', `Bearer ${accessToken}`);
+    }
+
+    return pendingRequest.send({ idToken });
+  }
+
+  function getIdentities(accessToken: string) {
+    return request(app.getHttpServer())
+      .get('/auth/identities')
+      .set('Authorization', `Bearer ${accessToken}`);
+  }
+
+  async function createPasswordAccount(email: string) {
+    const password = 'Password123!';
+    const passwordHash = await passwordService.hash(password);
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    ipSequence += 1;
+    const loginResponse = await request(app.getHttpServer())
+      .post('/auth/login')
+      .set('X-Forwarded-For', `198.51.100.${ipSequence}`)
+      .send({
+        email,
+        password,
+      })
+      .expect(201);
+    const loginBody = expectObject(loginResponse.body as unknown);
+
+    return {
+      accessToken: expectStringField(loginBody, 'accessToken'),
+      user,
+    };
+  }
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -104,6 +162,7 @@ describe('GoogleAuthController (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    passwordService = app.get(PasswordService);
 
     const sourceLanguage = await prisma.language.create({
       data: {
@@ -312,6 +371,96 @@ describe('GoogleAuthController (e2e)', () => {
         },
       }),
     ).resolves.toBeNull();
+  });
+
+  it('requires authentication before linking a Google account', async () => {
+    const { idToken } = addGoogleIdentity('unauthenticated-link');
+
+    await postGoogleLink(idToken).expect(401);
+  });
+
+  it('links a matching Google identity and allows Google login afterward', async () => {
+    const { claims, idToken } = addGoogleIdentity('password-link');
+    const { accessToken, user } = await createPasswordAccount(claims.email);
+
+    const identitiesBeforeLink = await getIdentities(accessToken).expect(200);
+    expect(identitiesBeforeLink.body).toEqual([]);
+
+    const firstLinkResponse = await postGoogleLink(idToken, accessToken).expect(
+      200,
+    );
+
+    expect(firstLinkResponse.body).toMatchObject({
+      provider: 'GOOGLE',
+      email: claims.email,
+    });
+    expectStringField(
+      expectObject(firstLinkResponse.body as unknown),
+      'linkedAt',
+    );
+
+    await postGoogleLink(idToken, accessToken).expect(200);
+    await expect(
+      prisma.userIdentity.count({
+        where: {
+          userId: user.id,
+          provider: 'GOOGLE',
+        },
+      }),
+    ).resolves.toBe(1);
+
+    const identitiesAfterLink = await getIdentities(accessToken).expect(200);
+    expect(identitiesAfterLink.body).toEqual([
+      expect.objectContaining({
+        provider: 'GOOGLE',
+        email: claims.email,
+      }),
+    ]);
+
+    const googleLoginResponse = await postGoogle(idToken).expect(200);
+    const googleLoginBody = expectObject(googleLoginResponse.body as unknown);
+    const googleLoginUser = expectObject(googleLoginBody.user);
+
+    expect(googleLoginUser.id).toBe(user.id);
+  });
+
+  it('rejects linking a Google account with a different email', async () => {
+    const passwordIdentity = addGoogleIdentity('password-owner');
+    const googleIdentity = addGoogleIdentity('different-google-email');
+    const { accessToken } = await createPasswordAccount(
+      passwordIdentity.claims.email,
+    );
+
+    const response = await postGoogleLink(
+      googleIdentity.idToken,
+      accessToken,
+    ).expect(409);
+
+    expect(response.body).toMatchObject({
+      code: GOOGLE_LINK_EMAIL_MISMATCH_CODE,
+      message: GOOGLE_LINK_EMAIL_MISMATCH_MESSAGE,
+    });
+  });
+
+  it('rejects replacing an already linked Google account', async () => {
+    const firstIdentity = addGoogleIdentity('first-linked-account');
+    const secondIdentity = addGoogleIdentity('second-linked-account', {
+      email: firstIdentity.claims.email,
+    });
+    const { accessToken } = await createPasswordAccount(
+      firstIdentity.claims.email,
+    );
+
+    await postGoogleLink(firstIdentity.idToken, accessToken).expect(200);
+    const response = await postGoogleLink(
+      secondIdentity.idToken,
+      accessToken,
+    ).expect(409);
+
+    expect(response.body).toMatchObject({
+      code: GOOGLE_PROVIDER_ALREADY_LINKED_CODE,
+      message: GOOGLE_PROVIDER_ALREADY_LINKED_MESSAGE,
+    });
   });
 
   it('blocks Google login when the linked account is not active', async () => {

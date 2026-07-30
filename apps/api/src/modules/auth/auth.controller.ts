@@ -15,6 +15,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { ConfirmEmailVerificationDto } from './dto/confirm-email-verification.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
+import { LinkGoogleAccountDto } from './dto/link-google-account.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -76,6 +77,26 @@ export class AuthController {
     };
 
     return this.googleAuthService.authenticate(googleAuthDto, context);
+  }
+
+  @Get('identities')
+  @UseGuards(AccessTokenGuard)
+  identities(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.googleAuthService.getLinkedIdentities(currentUser.id);
+  }
+
+  @Post('google/link')
+  @AuthRateLimit('login')
+  @UseGuards(AccessTokenGuard)
+  @HttpCode(HttpStatus.OK)
+  linkGoogleAccount(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() linkGoogleAccountDto: LinkGoogleAccountDto,
+  ) {
+    return this.googleAuthService.linkAccount(
+      currentUser,
+      linkGoogleAccountDto,
+    );
   }
 
   @Post('forgot-password')

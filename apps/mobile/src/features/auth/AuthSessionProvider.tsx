@@ -22,6 +22,7 @@ import { syncCurrentDevicePushToken } from "@/features/push-notifications";
 import { isApiError } from "@/shared/api/http-error";
 import { queryClient } from "@/shared/lib/query-client";
 import { logoutSession, refreshSession } from "./api";
+import { clearGoogleSignInSession } from "./google-sign-in/google-sign-in-client";
 import type { AuthTokensResponse } from "./model";
 import { authQueryKeys } from "./query-keys";
 
@@ -87,6 +88,10 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
 
     const refreshToken = await refreshTokenPromise.catch(() => null);
     await invalidateSession();
+
+    await clearGoogleSignInSession().catch((error: unknown) => {
+      logSessionWarning("Google sign-in session could not be cleared", error);
+    });
 
     if (options.revokeServerSession !== false && refreshToken) {
       await logoutSession({ refreshToken }).catch((error: unknown) => {

@@ -12,6 +12,20 @@ type CreateGoogleUserInput = {
   verifiedAt: Date;
 };
 
+type LinkGoogleIdentityInput = {
+  email: string;
+  providerSubject: string;
+  userId: string;
+};
+
+export type LinkedAuthIdentityRecord = {
+  id: string;
+  provider: AuthProvider;
+  providerSubject: string;
+  emailAtLinkTime: string | null;
+  createdAt: Date;
+};
+
 export type CreateGoogleUserResult =
   | {
       kind: 'CREATED' | 'IDENTITY_EXISTS';
@@ -19,6 +33,18 @@ export type CreateGoogleUserResult =
     }
   | {
       kind: 'EMAIL_EXISTS';
+    };
+
+export type LinkGoogleIdentityResult =
+  | {
+      kind: 'LINKED' | 'ALREADY_LINKED';
+      identity: LinkedAuthIdentityRecord;
+    }
+  | {
+      kind: 'PROVIDER_SUBJECT_IN_USE';
+    }
+  | {
+      kind: 'USER_PROVIDER_EXISTS';
     };
 
 @Injectable()
@@ -89,6 +115,69 @@ export class GoogleAuthRepository {
     }
   }
 
+  getLinkedIdentities(userId: string): Promise<LinkedAuthIdentityRecord[]> {
+    return this.prisma.userIdentity.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+        provider: true,
+        providerSubject: true,
+        emailAtLinkTime: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+  }
+
+  async linkGoogleIdentity(
+    input: LinkGoogleIdentityInput,
+  ): Promise<LinkGoogleIdentityResult> {
+    const existingResult = await this.resolveExistingLink(input);
+
+    if (existingResult) {
+      return existingResult;
+    }
+
+    try {
+      const identity = await this.prisma.userIdentity.create({
+        data: {
+          userId: input.userId,
+          provider: AuthProvider.GOOGLE,
+          providerSubject: input.providerSubject,
+          emailAtLinkTime: input.email,
+        },
+        select: {
+          id: true,
+          provider: true,
+          providerSubject: true,
+          emailAtLinkTime: true,
+          createdAt: true,
+        },
+      });
+
+      return {
+        kind: 'LINKED',
+        identity,
+      };
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const concurrentResult = await this.resolveExistingLink(input);
+
+      if (concurrentResult) {
+        return concurrentResult;
+      }
+
+      throw new Error('Could not resolve Google account linking conflict');
+    }
+  }
+
   private async resolveConcurrentCreation(
     input: CreateGoogleUserInput,
   ): Promise<CreateGoogleUserResult> {
@@ -119,6 +208,58 @@ export class GoogleAuthRepository {
     }
 
     throw new Error('Could not resolve Google account creation conflict');
+  }
+
+  private async resolveExistingLink(
+    input: LinkGoogleIdentityInput,
+  ): Promise<LinkGoogleIdentityResult | null> {
+    const identityBySubject = await this.prisma.userIdentity.findUnique({
+      where: {
+        provider_providerSubject: {
+          provider: AuthProvider.GOOGLE,
+          providerSubject: input.providerSubject,
+        },
+      },
+      select: {
+        id: true,
+        userId: true,
+        provider: true,
+        providerSubject: true,
+        emailAtLinkTime: true,
+        createdAt: true,
+      },
+    });
+
+    if (identityBySubject) {
+      if (identityBySubject.userId !== input.userId) {
+        return {
+          kind: 'PROVIDER_SUBJECT_IN_USE',
+        };
+      }
+
+      return {
+        kind: 'ALREADY_LINKED',
+        identity: identityBySubject,
+      };
+    }
+
+    const identityForUser = await this.prisma.userIdentity.findUnique({
+      where: {
+        userId_provider: {
+          userId: input.userId,
+          provider: AuthProvider.GOOGLE,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return identityForUser
+      ? {
+          kind: 'USER_PROVIDER_EXISTS',
+        }
+      : null;
   }
 
   private isUniqueConstraintError(error: unknown): error is { code: 'P2002' } {

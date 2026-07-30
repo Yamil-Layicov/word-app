@@ -2,7 +2,6 @@ import {
   GoogleOneTapSignIn,
   isCancelledResponse,
   isErrorWithCode,
-  isNoSavedCredentialFoundResponse,
   isSuccessResponse,
   statusCodes,
   type OneTapResponse,
@@ -25,16 +24,7 @@ export async function requestGoogleIdToken(): Promise<GoogleIdTokenResult> {
     configureOnce();
     await GoogleOneTapSignIn.checkPlayServices();
 
-    let response = await GoogleOneTapSignIn.signIn();
-
-    if (isNoSavedCredentialFoundResponse(response)) {
-      response = await GoogleOneTapSignIn.createAccount();
-    }
-
-    if (isNoSavedCredentialFoundResponse(response)) {
-      response = await GoogleOneTapSignIn.presentExplicitSignIn();
-    }
-
+    const response = await GoogleOneTapSignIn.presentExplicitSignIn();
     return getIdTokenResult(response);
   } catch (error) {
     if (
@@ -46,6 +36,10 @@ export async function requestGoogleIdToken(): Promise<GoogleIdTokenResult> {
 
     throw mapNativeError(error);
   }
+}
+
+export function clearGoogleSignInSession(): Promise<void> {
+  return GoogleOneTapSignIn.signOut();
 }
 
 function configureOnce() {

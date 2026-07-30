@@ -2,6 +2,8 @@ export {
   authenticateWithGoogle,
   confirmEmailVerification,
   getCurrentUser,
+  getLinkedAuthIdentities,
+  linkGoogleAccount,
   login,
   logoutSession,
   refreshSession,
@@ -39,6 +41,7 @@ export {
 } from "./form-validation";
 export { useLogin } from "./hooks/useLogin";
 export { useGoogleAuth } from "./hooks/useGoogleAuth";
+export { useLinkGoogleAccount } from "./hooks/useLinkGoogleAccount";
 export { useConfirmEmailVerification } from "./hooks/useConfirmEmailVerification";
 export { useLogout } from "./hooks/useLogout";
 export { useRegister } from "./hooks/useRegister";
@@ -47,7 +50,7 @@ export { useRequestEmailVerification } from "./hooks/useRequestEmailVerification
 export { useResetPassword } from "./hooks/useResetPassword";
 export { useStartSession } from "./hooks/useStartSession";
 export { useAuthFailureRedirect } from "./hooks/useAuthFailureRedirect";
-export { useCurrentUserQuery } from "./queries";
+export { useAuthIdentitiesQuery, useCurrentUserQuery } from "./queries";
 export {
   buildRegisterRequest,
   clearRegisterDraft,
@@ -79,6 +82,7 @@ export type {
   AuthTokensResponse,
   AuthUser,
   AuthUserProfile,
+  AuthProvider,
   ConfirmEmailVerificationRequest,
   ConfirmEmailVerificationResponse,
   ForgotPasswordRequest,
@@ -88,6 +92,8 @@ export type {
   GoogleAuthProfile,
   GoogleAuthRequest,
   GoogleAuthResponse,
+  LinkedAuthIdentity,
+  LinkGoogleAccountRequest,
   LoginRequest,
   RefreshTokenRequest,
   RegisterRequest,

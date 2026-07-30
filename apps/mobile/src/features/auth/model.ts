@@ -1,5 +1,6 @@
 export type UserRole = "USER" | "ADMIN" | "SUPER_ADMIN";
 export type UserStatus = "ACTIVE" | "BLOCKED" | "DELETED";
+export type AuthProvider = "GOOGLE";
 
 export type AuthUserProfile = {
   id: string;
@@ -57,6 +58,16 @@ export type GoogleAuthProfile = {
 export type GoogleAuthRequest = {
   idToken: string;
   languagePairId?: string;
+};
+
+export type LinkGoogleAccountRequest = {
+  idToken: string;
+};
+
+export type LinkedAuthIdentity = {
+  provider: AuthProvider;
+  email: string | null;
+  linkedAt: string;
 };
 
 export type GoogleAuthOnboardingResponse = {

@@ -14,3 +14,7 @@ export async function requestGoogleIdToken(): Promise<GoogleIdTokenResult> {
     "Google sign-in is available in the Android and iOS app.",
   );
 }
+
+export async function clearGoogleSignInSession(): Promise<void> {
+  // The web build does not create a native Google credential session.
+}

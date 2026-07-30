@@ -1,3 +1,4 @@
+import type { AuthProvider } from '@prisma/client';
 import type { AuthLoginResponse } from '../auth.types';
 
 export const GOOGLE_AUTH_STATUS = {
@@ -21,3 +22,9 @@ export type GoogleAuthAuthenticatedResponse = AuthLoginResponse & {
 export type GoogleAuthResponse =
   | GoogleAuthOnboardingResponse
   | GoogleAuthAuthenticatedResponse;
+
+export type LinkedAuthIdentityResponse = {
+  provider: AuthProvider;
+  email: string | null;
+  linkedAt: Date;
+};

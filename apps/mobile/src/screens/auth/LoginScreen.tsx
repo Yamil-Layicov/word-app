@@ -100,6 +100,8 @@ export function LoginScreen() {
       return;
     }
 
+    let selectedGoogleEmail: string | undefined;
+
     setNotice(null);
     setIsRequestingGoogleCredential(true);
 
@@ -110,6 +112,7 @@ export function LoginScreen() {
         return;
       }
 
+      selectedGoogleEmail = credential.email;
       const response = await googleAuthMutation.mutateAsync({
         idToken: credential.idToken,
       });
@@ -129,6 +132,20 @@ export function LoginScreen() {
       });
       router.push("/language-pair");
     } catch (error) {
+      if (
+        selectedGoogleEmail &&
+        isApiError(error) &&
+        error.response?.code === AUTH_API_ERROR_CODE.emailVerificationRequired
+      ) {
+        router.replace({
+          pathname: "/verify-email",
+          params: {
+            email: selectedGoogleEmail,
+          },
+        });
+        return;
+      }
+
       const retryAfterSeconds = getApiRetryAfterSeconds(error);
 
       if (retryAfterSeconds !== null) {

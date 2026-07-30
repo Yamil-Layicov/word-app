@@ -18,6 +18,10 @@ type LinkGoogleIdentityInput = {
   userId: string;
 };
 
+type GoogleAutoLinkUser = AuthUserResponseModel & {
+  emailVerifiedAt: Date | null;
+};
+
 export type LinkedAuthIdentityRecord = {
   id: string;
   provider: AuthProvider;
@@ -69,6 +73,20 @@ export class GoogleAuthRepository {
     });
 
     return identity?.user ?? null;
+  }
+
+  findUserByEmailForAutoLink(
+    email: string,
+  ): Promise<GoogleAutoLinkUser | null> {
+    return this.prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        ...authUserResponseSelect,
+        emailVerifiedAt: true,
+      },
+    });
   }
 
   async createGoogleUser(

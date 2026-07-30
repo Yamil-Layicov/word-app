@@ -48,7 +48,12 @@ describe("native Google sign-in client", () => {
     checkPlayServicesMock.mockResolvedValue(undefined);
     presentExplicitSignInMock.mockResolvedValue({
       type: "success",
-      data: { idToken: "google-id-token" },
+      data: {
+        idToken: "google-id-token",
+        user: {
+          email: " Google@Example.COM ",
+        },
+      },
     });
     signOutMock.mockResolvedValue(undefined);
     isCancelledResponseMock.mockReturnValue(false);
@@ -60,6 +65,7 @@ describe("native Google sign-in client", () => {
     await expect(requestGoogleIdToken()).resolves.toEqual({
       status: "SUCCESS",
       idToken: "google-id-token",
+      email: "google@example.com",
     });
 
     expect(checkPlayServicesMock).toHaveBeenCalledTimes(1);

@@ -293,6 +293,42 @@ describe("LoginScreen", () => {
     expect(clearGoogleAuthDraftMock).toHaveBeenCalled();
   });
 
+  it("opens email verification when Google matches an unverified account", async () => {
+    isGoogleSignInSupportedMock.mockReturnValue(true);
+    requestGoogleIdTokenMock.mockResolvedValue({
+      status: "SUCCESS",
+      idToken: "google-id-token",
+      email: "user@example.com",
+    });
+    googleAuth.mockRejectedValue(
+      new ApiError({
+        status: 403,
+        message: "Verify your email before logging in.",
+        response: {
+          statusCode: 403,
+          message: "Verify your email before logging in.",
+          error: "Forbidden",
+          code: AUTH_API_ERROR_CODE.emailVerificationRequired,
+        },
+      }),
+    );
+    render(<LoginScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith({
+        pathname: "/verify-email",
+        params: {
+          email: "user@example.com",
+        },
+      });
+    });
+    expect(startSession).not.toHaveBeenCalled();
+  });
+
   it("saves a temporary draft when Google onboarding is required", async () => {
     isGoogleSignInSupportedMock.mockReturnValue(true);
     requestGoogleIdTokenMock.mockResolvedValue({

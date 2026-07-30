@@ -61,9 +61,12 @@ function getIdTokenResult(response: OneTapResponse): GoogleIdTokenResult {
   }
 
   if (isSuccessResponse(response) && response.data.idToken) {
+    const email = response.data.user.email?.trim().toLowerCase();
+
     return {
       status: "SUCCESS",
       idToken: response.data.idToken,
+      email: email || undefined,
     };
   }
 

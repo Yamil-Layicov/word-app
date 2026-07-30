@@ -8,8 +8,6 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import {
-  GOOGLE_ACCOUNT_LINK_REQUIRED_CODE,
-  GOOGLE_ACCOUNT_LINK_REQUIRED_MESSAGE,
   GOOGLE_LINK_EMAIL_MISMATCH_CODE,
   GOOGLE_LINK_EMAIL_MISMATCH_MESSAGE,
   GOOGLE_PROVIDER_ALREADY_LINKED_CODE,
@@ -21,6 +19,10 @@ import {
   type GoogleIdentityClaims,
   type GoogleIdTokenVerifier,
 } from '../src/modules/auth/google/google-id-token-verifier';
+import {
+  EMAIL_VERIFICATION_REQUIRED_CODE,
+  EMAIL_VERIFICATION_REQUIRED_MESSAGE,
+} from '../src/modules/auth/email-verification.service';
 import { PasswordService } from '../src/modules/auth/password.service';
 import { expectObject, expectStringField } from './helpers/response.helpers';
 
@@ -344,26 +346,85 @@ describe('GoogleAuthController (e2e)', () => {
     ).resolves.toBe(1);
   });
 
-  it('requires explicit linking when a password account owns the email', async () => {
-    const { claims, idToken } = addGoogleIdentity('link-required');
+  it('automatically links a verified password account with the same email', async () => {
+    const { claims, idToken } = addGoogleIdentity('automatic-link');
+    const { user } = await createPasswordAccount(claims.email);
+
+    const response = await postGoogle(idToken).expect(200);
+    const body = expectObject(response.body as unknown);
+    const authenticatedUser = expectObject(body.user);
+
+    expect(body.status).toBe(GOOGLE_AUTH_STATUS.authenticated);
+    expect(authenticatedUser.id).toBe(user.id);
+    expectStringField(body, 'accessToken');
+    expectStringField(body, 'refreshToken');
+
+    const storedUser = await prisma.user.findUnique({
+      where: {
+        id: user.id,
+      },
+      select: {
+        passwordHash: true,
+        identities: {
+          select: {
+            provider: true,
+            providerSubject: true,
+            emailAtLinkTime: true,
+          },
+        },
+      },
+    });
+
+    expect(storedUser?.passwordHash).not.toBeNull();
+    expect(storedUser?.identities).toEqual([
+      {
+        provider: 'GOOGLE',
+        providerSubject: claims.subject,
+        emailAtLinkTime: claims.email,
+      },
+    ]);
+  });
+
+  it('does not automatically link an unverified password account', async () => {
+    const { claims, idToken } = addGoogleIdentity('unverified-auto-link');
+
+    await prisma.user.create({
+      data: {
+        email: claims.email,
+        passwordHash: 'existing-password-hash',
+        emailVerifiedAt: null,
+      },
+    });
+
+    const response = await postGoogle(idToken).expect(403);
+
+    expect(response.body).toMatchObject({
+      statusCode: 403,
+      message: EMAIL_VERIFICATION_REQUIRED_MESSAGE,
+      code: EMAIL_VERIFICATION_REQUIRED_CODE,
+    });
+    await expect(
+      prisma.userIdentity.findFirst({
+        where: {
+          providerSubject: claims.subject,
+        },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('does not automatically link an inactive password account', async () => {
+    const { claims, idToken } = addGoogleIdentity('blocked-auto-link');
 
     await prisma.user.create({
       data: {
         email: claims.email,
         passwordHash: 'existing-password-hash',
         emailVerifiedAt: new Date(),
+        status: UserStatus.BLOCKED,
       },
     });
 
-    const response = await postGoogle(idToken, {
-      languagePairId,
-    }).expect(409);
-
-    expect(response.body).toMatchObject({
-      statusCode: 409,
-      message: GOOGLE_ACCOUNT_LINK_REQUIRED_MESSAGE,
-      code: GOOGLE_ACCOUNT_LINK_REQUIRED_CODE,
-    });
+    await postGoogle(idToken).expect(403);
     await expect(
       prisma.userIdentity.findFirst({
         where: {

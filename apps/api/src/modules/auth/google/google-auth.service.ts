@@ -9,6 +9,10 @@ import { UserStatus } from '@prisma/client';
 import { ClockService } from '../../../common/time/clock.service';
 import { AuthSessionIssuer } from '../auth-session.issuer';
 import { AuthRepository } from '../auth.repository';
+import {
+  EMAIL_VERIFICATION_REQUIRED_CODE,
+  EMAIL_VERIFICATION_REQUIRED_MESSAGE,
+} from '../email-verification.service';
 import type {
   AuthenticatedUser,
   AuthRequestContext,
@@ -29,9 +33,6 @@ import {
   type LinkedAuthIdentityResponse,
 } from './google-auth.types';
 
-export const GOOGLE_ACCOUNT_LINK_REQUIRED_CODE = 'GOOGLE_ACCOUNT_LINK_REQUIRED';
-export const GOOGLE_ACCOUNT_LINK_REQUIRED_MESSAGE =
-  'An account with this email already exists. Sign in with your password to link Google.';
 export const GOOGLE_LINK_EMAIL_MISMATCH_CODE = 'GOOGLE_LINK_EMAIL_MISMATCH';
 export const GOOGLE_LINK_EMAIL_MISMATCH_MESSAGE =
   'Choose the Google account that uses the same email as your Word App account.';
@@ -68,10 +69,11 @@ export class GoogleAuthService {
       return this.authenticateUser(linkedUser, context);
     }
 
-    const emailUser = await this.authRepository.findUserByEmail(claims.email);
+    const emailUser =
+      await this.googleAuthRepository.findUserByEmailForAutoLink(claims.email);
 
     if (emailUser) {
-      throw this.accountLinkRequired();
+      return this.autoLinkAndAuthenticate(emailUser, claims, context);
     }
 
     if (!googleAuthDto.languagePairId) {
@@ -172,10 +174,60 @@ export class GoogleAuthService {
         return this.authenticateUser(linkedUser, context);
       }
 
-      throw this.accountLinkRequired();
+      const emailUser =
+        await this.googleAuthRepository.findUserByEmailForAutoLink(
+          claims.email,
+        );
+
+      if (emailUser) {
+        return this.autoLinkAndAuthenticate(emailUser, claims, context);
+      }
+
+      throw new ConflictException('Could not complete Google Sign-In');
     }
 
     return this.authenticateUser(result.user, context);
+  }
+
+  private async autoLinkAndAuthenticate(
+    user: AuthUserResponseModel & { emailVerifiedAt: Date | null },
+    claims: GoogleIdentityClaims,
+    context: AuthRequestContext,
+  ): Promise<GoogleAuthAuthenticatedResponse> {
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException('Account is not active');
+    }
+
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        message: EMAIL_VERIFICATION_REQUIRED_MESSAGE,
+        error: 'Forbidden',
+        code: EMAIL_VERIFICATION_REQUIRED_CODE,
+      });
+    }
+
+    const result = await this.googleAuthRepository.linkGoogleIdentity({
+      userId: user.id,
+      providerSubject: claims.subject,
+      email: claims.email,
+    });
+
+    if (result.kind === 'PROVIDER_SUBJECT_IN_USE') {
+      throw this.googleLinkConflict(
+        GOOGLE_IDENTITY_IN_USE_CODE,
+        GOOGLE_IDENTITY_IN_USE_MESSAGE,
+      );
+    }
+
+    if (result.kind === 'USER_PROVIDER_EXISTS') {
+      throw this.googleLinkConflict(
+        GOOGLE_PROVIDER_ALREADY_LINKED_CODE,
+        GOOGLE_PROVIDER_ALREADY_LINKED_MESSAGE,
+      );
+    }
+
+    return this.authenticateUser(user, context);
   }
 
   private async authenticateUser(
@@ -203,15 +255,6 @@ export class GoogleAuthService {
     if (!languagePair) {
       throw new BadRequestException('Invalid language pair');
     }
-  }
-
-  private accountLinkRequired(): ConflictException {
-    return new ConflictException({
-      statusCode: 409,
-      message: GOOGLE_ACCOUNT_LINK_REQUIRED_MESSAGE,
-      error: 'Conflict',
-      code: GOOGLE_ACCOUNT_LINK_REQUIRED_CODE,
-    });
   }
 
   private googleLinkConflict(code: string, message: string): ConflictException {

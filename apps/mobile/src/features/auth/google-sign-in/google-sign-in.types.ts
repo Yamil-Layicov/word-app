@@ -13,6 +13,7 @@ export type GoogleIdTokenResult =
   | {
       status: "SUCCESS";
       idToken: string;
+      email?: string;
     }
   | {
       status: "CANCELLED";

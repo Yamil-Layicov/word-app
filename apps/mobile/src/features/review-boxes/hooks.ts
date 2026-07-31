@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 
+import { deckQueryKeys } from "@/entities/deck";
 import { masteredCollectionQueryKeys } from "@/entities/mastered-collection";
 import { practiceItemQueryKeys } from "@/entities/practice";
 import { reviewQueryKeys } from "@/entities/review";
@@ -35,6 +36,7 @@ function invalidateScheduledReviewData() {
   void queryClient.invalidateQueries({
     queryKey: masteredCollectionQueryKeys.all,
   });
+  void queryClient.invalidateQueries({ queryKey: deckQueryKeys.all });
 }
 
 export function useScheduleUserWord() {

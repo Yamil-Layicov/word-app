@@ -1,6 +1,11 @@
 /// <reference types="jest" />
 
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react-native";
 import { useRouter } from "expo-router";
 
 import { useVocabularyItemsQuery } from "@/entities/vocabulary-item";
@@ -50,6 +55,8 @@ const startScheduledReviewBox = jest.fn();
 
 describe("ReviewBoxesScreen", () => {
   beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-30T10:00:00.000Z"));
     jest.clearAllMocks();
     useRouterMock.mockReturnValue(router);
     useAuthFailureRedirectMock.mockReturnValue(false);
@@ -75,6 +82,10 @@ describe("ReviewBoxesScreen", () => {
       isPending: false,
       mutate: startScheduledReviewBox,
     });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it("renders the five interval boxes and the mastered box when empty", () => {
@@ -148,5 +159,86 @@ describe("ReviewBoxesScreen", () => {
         boxId: "SIX_HOURS",
       },
     });
+  });
+
+  it("updates the countdown for a started box", () => {
+    useScheduledReviewBoxesQueryMock.mockReturnValue({
+      data: {
+        boxes: [
+          {
+            interval: "ONE_HOUR",
+            label: "1 hour",
+            totalWords: 1,
+            queuedWords: 0,
+            startedWords: 1,
+            dueWords: 0,
+            nextDueAt: "2026-07-30T11:00:00.000Z",
+          },
+        ],
+      },
+      error: null,
+      isError: false,
+      refetch: refetchScheduledBoxes,
+    });
+    render(<ReviewBoxesScreen />);
+
+    expect(screen.getByText("01:00:00")).toBeTruthy();
+    expect(screen.getByText("Tap to review words")).toBeTruthy();
+    expect(screen.getByText("Each word keeps its own timer.")).toBeTruthy();
+
+    act(() => {
+      jest.advanceTimersByTime(1_000);
+    });
+
+    expect(screen.getByText("00:59:59")).toBeTruthy();
+  });
+
+  it("treats elapsed started words as due before the next refetch", () => {
+    useScheduledReviewBoxesQueryMock.mockReturnValue({
+      data: {
+        boxes: [
+          {
+            interval: "SIX_HOURS",
+            label: "6 hours",
+            totalWords: 2,
+            queuedWords: 0,
+            startedWords: 2,
+            dueWords: 0,
+            nextDueAt: "2026-07-30T09:59:59.000Z",
+          },
+        ],
+      },
+      error: null,
+      isError: false,
+      refetch: refetchScheduledBoxes,
+    });
+    render(<ReviewBoxesScreen />);
+
+    expect(screen.getByText("Due now")).toBeTruthy();
+    expect(screen.getByText("Tap to review words")).toBeTruthy();
+    expect(screen.getByText("This box is ready now.")).toBeTruthy();
+  });
+
+  it("retries both data sources when loading the boxes fails", () => {
+    useVocabularyItemsQueryMock.mockReturnValue({
+      data: undefined,
+      error: new Error("Vocabulary request failed"),
+      isError: true,
+      refetch: refetchVocabulary,
+    });
+    useScheduledReviewBoxesQueryMock.mockReturnValue({
+      data: undefined,
+      error: new Error("Review boxes request failed"),
+      isError: true,
+      refetch: refetchScheduledBoxes,
+    });
+    render(<ReviewBoxesScreen />);
+
+    expect(screen.getByText("Could not load review boxes.")).toBeTruthy();
+
+    fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+
+    expect(refetchVocabulary).toHaveBeenCalledTimes(1);
+    expect(refetchScheduledBoxes).toHaveBeenCalledTimes(1);
   });
 });

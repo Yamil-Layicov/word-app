@@ -268,9 +268,7 @@ export function DeckDetailScreen() {
         loading={addDeckWordsMutation.isPending}
         visible={isAddWordsModalVisible}
         onClose={() => setAddWordsModalVisible(false)}
-        onSubmit={(drafts) => {
-          void handleAddWords(drafts);
-        }}
+        onSubmit={handleAddWords}
       />
 
       <DeckWordDeleteDialog
@@ -476,7 +474,7 @@ function ActionButton({
 type AddWordsModalProps = {
   loading: boolean;
   onClose: () => void;
-  onSubmit: (drafts: DeckWordDraft[]) => void;
+  onSubmit: (drafts: DeckWordDraft[]) => Promise<void>;
   visible: boolean;
 };
 
@@ -491,7 +489,7 @@ function AddWordsModal({
   ]);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const validDrafts = drafts
       .map((draft) => ({
         ...draft,
@@ -515,8 +513,19 @@ function AddWordsModal({
     }
 
     setError(null);
-    onSubmit(validDrafts);
-    setDrafts([createWordDraft()]);
+
+    try {
+      await onSubmit(validDrafts);
+      setDrafts([createWordDraft()]);
+    } catch (submitError) {
+      if (!isApiError(submitError) || submitError.status !== 401) {
+        setError(
+          isApiError(submitError)
+            ? submitError.message
+            : "Could not add these words.",
+        );
+      }
+    }
   };
 
   return (
@@ -626,7 +635,9 @@ function AddWordsModal({
           loading={loading}
           title={loading ? "Adding..." : "Add to deck"}
           style={styles.submitWordsButton}
-          onPress={handleSubmit}
+          onPress={() => {
+            void handleSubmit();
+          }}
         />
       </ScreenContainer>
     </Modal>

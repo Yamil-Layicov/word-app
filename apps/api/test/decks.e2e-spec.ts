@@ -321,7 +321,10 @@ describe('DecksController (e2e)', () => {
       item.sourceText.endsWith('add-words one'),
     );
 
-    expect(firstWord).toBeDefined();
+    if (!firstWord) {
+      throw new Error('Expected the first added deck word');
+    }
+
     expect(firstWord).toMatchObject({
       sourceText: `source ${runId} add-words one`,
       targetText: `target ${runId} add-words one`,
@@ -331,7 +334,7 @@ describe('DecksController (e2e)', () => {
       note: null,
       visibility: AudienceScope.PRIVATE,
     });
-    expect(firstWord?.userWord).toMatchObject({
+    expect(firstWord.userWord).toMatchObject({
       vocabularyItemId: firstWord.id,
       status: UserWordStatus.NEW,
       masteryStep: 0,

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   AudienceScope,
+  ScheduledReviewState,
   UserWordStatus,
   WordType,
   type CefrLevel,
@@ -53,6 +54,8 @@ type UpdateUserVocabularyItemInput = {
   languagePairId: string;
   isFavorite?: boolean;
   status?: UserWordStatus;
+  masteryStep?: number;
+  cancelActiveSchedulesAt?: Date;
 };
 
 type ArchiveUserVocabularyItemInput = {
@@ -108,6 +111,12 @@ const userWordWithVocabularyItemSelect = {
     select: vocabularyItemSelect,
   },
 } as const;
+
+const activeScheduleStates = [
+  ScheduledReviewState.QUEUED,
+  ScheduledReviewState.STARTED,
+  ScheduledReviewState.DUE,
+];
 
 @Injectable()
 export class VocabularyRepository {
@@ -297,43 +306,64 @@ export class VocabularyRepository {
   async updateUserVocabularyItem(
     input: UpdateUserVocabularyItemInput,
   ): Promise<CreateVocabularyItemResult | null> {
-    const userWord = await this.prisma.userWord.findFirst({
-      where: {
-        userId: input.userId,
-        vocabularyItemId: input.vocabularyItemId,
-        vocabularyItem: {
-          languagePairId: input.languagePairId,
-          isActive: true,
+    return this.prisma.$transaction(async (tx) => {
+      const userWord = await tx.userWord.findFirst({
+        where: {
+          userId: input.userId,
+          vocabularyItemId: input.vocabularyItemId,
+          vocabularyItem: {
+            languagePairId: input.languagePairId,
+            isActive: true,
+          },
         },
-      },
-      select: {
-        id: true,
-      },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!userWord) {
+        return null;
+      }
+
+      const updatedUserWord = await tx.userWord.update({
+        where: {
+          id: userWord.id,
+        },
+        data: {
+          ...(input.isFavorite !== undefined
+            ? { isFavorite: input.isFavorite }
+            : {}),
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.masteryStep !== undefined
+            ? { masteryStep: input.masteryStep }
+            : {}),
+        },
+        select: userWordWithVocabularyItemSelect,
+      });
+
+      if (input.cancelActiveSchedulesAt) {
+        await tx.userWordSchedule.updateMany({
+          where: {
+            userId: input.userId,
+            userWordId: userWord.id,
+            state: {
+              in: activeScheduleStates,
+            },
+          },
+          data: {
+            state: ScheduledReviewState.CANCELLED,
+            cancelledAt: input.cancelActiveSchedulesAt,
+          },
+        });
+      }
+
+      const { vocabularyItem, ...userWordModel } = updatedUserWord;
+
+      return {
+        vocabularyItem,
+        userWord: userWordModel,
+      };
     });
-
-    if (!userWord) {
-      return null;
-    }
-
-    const updatedUserWord = await this.prisma.userWord.update({
-      where: {
-        id: userWord.id,
-      },
-      data: {
-        ...(input.isFavorite !== undefined
-          ? { isFavorite: input.isFavorite }
-          : {}),
-        ...(input.status ? { status: input.status } : {}),
-      },
-      select: userWordWithVocabularyItemSelect,
-    });
-
-    const { vocabularyItem, ...userWordModel } = updatedUserWord;
-
-    return {
-      vocabularyItem,
-      userWord: userWordModel,
-    };
   }
 
   async archiveUserVocabularyItem(

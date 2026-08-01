@@ -19,6 +19,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   AudienceScope,
   CefrLevel,
+  ScheduledReviewInterval,
+  ScheduledReviewState,
   UserWordStatus,
   WordType,
 } from '@prisma/client';
@@ -47,6 +49,7 @@ type UserWordResponseBody = {
   vocabularyItemId: string;
   status: UserWordStatus;
   isFavorite: boolean;
+  masteryStep: number;
   reviewCount: number;
   correctCount: number;
   wrongCount: number;
@@ -109,6 +112,7 @@ function expectUserWordBody(value: unknown): UserWordResponseBody {
     vocabularyItemId: expectStringField(body, 'vocabularyItemId'),
     status: expectStringField(body, 'status') as UserWordStatus,
     isFavorite: expectBooleanField(body, 'isFavorite'),
+    masteryStep: expectNumberField(body, 'masteryStep'),
     reviewCount: expectNumberField(body, 'reviewCount'),
     correctCount: expectNumberField(body, 'correctCount'),
     wrongCount: expectNumberField(body, 'wrongCount'),
@@ -184,6 +188,7 @@ describe('VocabularyController (e2e)', () => {
   let sourceLanguageId: string;
   let targetLanguageId: string;
   let accessToken: string;
+  let userId: string;
 
   const runId = `${Date.now()}`;
   const email = `vocabulary-e2e-${runId}@example.com`;
@@ -299,10 +304,11 @@ describe('VocabularyController (e2e)', () => {
       })
       .expect(201);
 
-    await prisma.user.update({
+    const user = await prisma.user.update({
       where: { email },
       data: { emailVerifiedAt: new Date() },
     });
+    userId = user.id;
 
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
@@ -463,10 +469,48 @@ describe('VocabularyController (e2e)', () => {
 
   /**
    * PATCH yalnız user-specific field-ləri update etməlidir.
-   * Burada favorite və status update olunur.
+   * MASTERED keçidi masteryStep-i tamamlamalı və aktiv manual review-ları
+   * eyni əməliyyatda ləğv etməlidir.
    */
   it('should update user vocabulary item fields', async () => {
     const createdItem = await createVocabularyItem('patch');
+    const now = new Date();
+
+    await prisma.userWordSchedule.createMany({
+      data: [
+        {
+          userId,
+          userWordId: createdItem.userWord.id,
+          interval: ScheduledReviewInterval.ONE_HOUR,
+          state: ScheduledReviewState.QUEUED,
+        },
+        {
+          userId,
+          userWordId: createdItem.userWord.id,
+          interval: ScheduledReviewInterval.SIX_HOURS,
+          state: ScheduledReviewState.STARTED,
+          startedAt: now,
+          dueAt: new Date(now.getTime() + 6 * 60 * 60 * 1_000),
+        },
+        {
+          userId,
+          userWordId: createdItem.userWord.id,
+          interval: ScheduledReviewInterval.ONE_DAY,
+          state: ScheduledReviewState.DUE,
+          startedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1_000),
+          dueAt: new Date(now.getTime() - 24 * 60 * 60 * 1_000),
+        },
+        {
+          userId,
+          userWordId: createdItem.userWord.id,
+          interval: ScheduledReviewInterval.THREE_DAYS,
+          state: ScheduledReviewState.COMPLETED,
+          startedAt: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1_000),
+          dueAt: new Date(now.getTime() - 24 * 60 * 60 * 1_000),
+          completedAt: now,
+        },
+      ],
+    });
 
     const response = await request(app.getHttpServer())
       .patch(`/vocabulary/items/${createdItem.id}`)
@@ -482,6 +526,33 @@ describe('VocabularyController (e2e)', () => {
     expect(body.id).toBe(createdItem.id);
     expect(body.userWord.isFavorite).toBe(true);
     expect(body.userWord.status).toBe(UserWordStatus.MASTERED);
+    expect(body.userWord.masteryStep).toBe(5);
+
+    const schedules = await prisma.userWordSchedule.findMany({
+      where: { userWordId: createdItem.userWord.id },
+    });
+    const activeScheduleStates = new Set<ScheduledReviewState>([
+      ScheduledReviewState.QUEUED,
+      ScheduledReviewState.STARTED,
+      ScheduledReviewState.DUE,
+    ]);
+    const activeSchedules = schedules.filter((schedule) =>
+      activeScheduleStates.has(schedule.state),
+    );
+    const cancelledSchedules = schedules.filter(
+      (schedule) => schedule.state === ScheduledReviewState.CANCELLED,
+    );
+    const completedSchedule = schedules.find(
+      (schedule) => schedule.state === ScheduledReviewState.COMPLETED,
+    );
+
+    expect(activeSchedules).toHaveLength(0);
+    expect(cancelledSchedules).toHaveLength(3);
+    expect(
+      cancelledSchedules.every((schedule) => schedule.cancelledAt !== null),
+    ).toBe(true);
+    expect(completedSchedule?.completedAt).toEqual(now);
+    expect(completedSchedule?.cancelledAt).toBeNull();
   });
 
   /**

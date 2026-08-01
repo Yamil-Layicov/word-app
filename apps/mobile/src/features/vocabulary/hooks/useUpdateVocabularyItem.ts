@@ -1,11 +1,13 @@
 import { useMutation } from "@tanstack/react-query";
 
+import { deckQueryKeys } from "@/entities/deck";
 import { masteredCollectionQueryKeys } from "@/entities/mastered-collection";
 import {
   updateVocabularyItem,
   vocabularyItemQueryKeys,
   type UpdateVocabularyItemRequest,
 } from "@/entities/vocabulary-item";
+import { scheduledReviewQueryKeys } from "@/features/review-boxes";
 import { queryClient } from "@/shared/lib/query-client";
 
 type UpdateVocabularyItemInput = {
@@ -24,6 +26,12 @@ export function useUpdateVocabularyItem() {
       });
       void queryClient.invalidateQueries({
         queryKey: masteredCollectionQueryKeys.all,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: scheduledReviewQueryKeys.all,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: deckQueryKeys.all,
       });
     },
   });

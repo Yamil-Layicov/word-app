@@ -5,7 +5,8 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { UserStatus } from '@prisma/client';
+import { UserStatus, UserWordStatus } from '@prisma/client';
+import { ClockService } from '../../common/time/clock.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateVocabularyItemDto } from './dto/create-vocabulary-item.dto';
 import { ListVocabularyItemsQueryDto } from './dto/list-vocabulary-items-query.dto';
@@ -21,10 +22,14 @@ import type {
 } from './vocabulary.types';
 
 const DEFAULT_LIST_LIMIT = 20;
+const MAX_MASTERY_STEP = 5;
 
 @Injectable()
 export class VocabularyService {
-  constructor(private readonly vocabularyRepository: VocabularyRepository) {}
+  constructor(
+    private readonly vocabularyRepository: VocabularyRepository,
+    private readonly clockService: ClockService,
+  ) {}
 
   async createItem(
     currentUser: AuthenticatedUser,
@@ -138,6 +143,8 @@ export class VocabularyService {
     const activeLanguagePairId = await this.getActiveLanguagePairId(
       currentUser.id,
     );
+    const isMarkingAsMastered =
+      updateUserVocabularyItemDto.status === UserWordStatus.MASTERED;
 
     const result = await this.vocabularyRepository.updateUserVocabularyItem({
       userId: currentUser.id,
@@ -148,6 +155,12 @@ export class VocabularyService {
         : {}),
       ...(updateUserVocabularyItemDto.status
         ? { status: updateUserVocabularyItemDto.status }
+        : {}),
+      ...(isMarkingAsMastered
+        ? {
+            masteryStep: MAX_MASTERY_STEP,
+            cancelActiveSchedulesAt: this.clockService.now(),
+          }
         : {}),
     });
 

@@ -14,7 +14,6 @@ import { useAuthFailureRedirect } from "@/features/auth";
 import {
   REVIEW_INTERVALS,
   getReviewIntervalByApiInterval,
-  useCancelScheduledReview,
   useScheduleUserWord,
   useScheduledReviewsQuery,
   type ReviewInterval,
@@ -34,15 +33,13 @@ export function VocabularyListScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const updateVocabularyItemMutation = useUpdateVocabularyItem();
   const scheduleUserWordMutation = useScheduleUserWord();
-  const cancelScheduledReviewMutation = useCancelScheduledReview();
   const scheduledReviewsQuery = useScheduledReviewsQuery();
   const vocabularyQuery = useInfiniteVocabularyItemsQuery({ limit: 20 });
   const hasUnauthorizedError = useAuthFailureRedirect(
     vocabularyQuery.error ??
       scheduledReviewsQuery.error ??
       updateVocabularyItemMutation.error ??
-      scheduleUserWordMutation.error ??
-      cancelScheduledReviewMutation.error,
+      scheduleUserWordMutation.error,
   );
   const items = vocabularyQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const scheduledByVocabularyItemId = useMemo(
@@ -79,17 +76,12 @@ export function VocabularyListScreen() {
   const handleMarkKnown = async (item: VocabularyItem) => {
     setSelectedItem(null);
     setNotice(null);
-    const scheduledReview = scheduledByVocabularyItemId.get(item.id);
 
     try {
       await updateVocabularyItemMutation.mutateAsync({
         id: item.id,
         data: { status: "MASTERED" },
       });
-
-      if (scheduledReview) {
-        await cancelScheduledReviewMutation.mutateAsync(scheduledReview.scheduleId);
-      }
 
       setNotice(`${item.sourceText} marked as mastered.`);
     } catch (error) {
@@ -169,8 +161,7 @@ export function VocabularyListScreen() {
         item={selectedItem}
         isUpdating={
           updateVocabularyItemMutation.isPending ||
-          scheduleUserWordMutation.isPending ||
-          cancelScheduledReviewMutation.isPending
+          scheduleUserWordMutation.isPending
         }
         onClose={() => setSelectedItem(null)}
         onMarkKnown={(item) => {

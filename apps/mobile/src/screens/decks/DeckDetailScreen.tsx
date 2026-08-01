@@ -21,7 +21,6 @@ import { useAddDeckWords, useRemoveDeckWord } from "@/features/decks";
 import {
   REVIEW_INTERVALS,
   getReviewIntervalByApiInterval,
-  useCancelScheduledReview,
   useScheduleUserWord,
   useScheduledReviewsQuery,
   type ReviewInterval,
@@ -47,7 +46,6 @@ export function DeckDetailScreen() {
   const scheduleUserWordMutation = useScheduleUserWord();
   const scheduledReviewsQuery = useScheduledReviewsQuery();
   const updateVocabularyItemMutation = useUpdateVocabularyItem();
-  const cancelScheduledReviewMutation = useCancelScheduledReview();
   const [isAddWordsModalVisible, setAddWordsModalVisible] = useState(false);
   const [selectedWord, setSelectedWord] = useState<DeckWord | null>(null);
   const [wordPendingDelete, setWordPendingDelete] = useState<DeckWord | null>(
@@ -60,8 +58,7 @@ export function DeckDetailScreen() {
       removeDeckWordMutation.error ??
       scheduleUserWordMutation.error ??
       scheduledReviewsQuery.error ??
-      updateVocabularyItemMutation.error ??
-      cancelScheduledReviewMutation.error,
+      updateVocabularyItemMutation.error,
   );
   const deck = deckQuery.data;
   const scheduledByVocabularyItemId = useMemo(
@@ -98,7 +95,6 @@ export function DeckDetailScreen() {
   };
 
   const handleMarkKnown = async (word: DeckWord) => {
-    const scheduledReview = scheduledByVocabularyItemId.get(word.id);
     setNotice(null);
 
     try {
@@ -106,12 +102,6 @@ export function DeckDetailScreen() {
         id: word.id,
         data: { status: "MASTERED" },
       });
-
-      if (scheduledReview) {
-        await cancelScheduledReviewMutation.mutateAsync(
-          scheduledReview.scheduleId,
-        );
-      }
 
       setSelectedWord(null);
       setNotice(`${word.sourceText} marked as mastered.`);
@@ -251,8 +241,7 @@ export function DeckDetailScreen() {
       <DeckWordActionSheet
         isUpdating={
           scheduleUserWordMutation.isPending ||
-          updateVocabularyItemMutation.isPending ||
-          cancelScheduledReviewMutation.isPending
+          updateVocabularyItemMutation.isPending
         }
         word={selectedWord}
         onClose={() => setSelectedWord(null)}

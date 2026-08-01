@@ -13,7 +13,6 @@ import { useDeckQuery, type DeckDetail, type DeckWord } from "@/entities/deck";
 import { useAuthFailureRedirect } from "@/features/auth";
 import { useAddDeckWords, useRemoveDeckWord } from "@/features/decks";
 import {
-  useCancelScheduledReview,
   useScheduleUserWord,
   useScheduledReviewsQuery,
   type ScheduledReviewItem,
@@ -72,7 +71,6 @@ jest.mock("@/features/decks", () => ({
 
 jest.mock("@/features/review-boxes", () => ({
   ...jest.requireActual("@/features/review-boxes/model"),
-  useCancelScheduledReview: jest.fn(),
   useScheduleUserWord: jest.fn(),
   useScheduledReviewsQuery: jest.fn(),
 }));
@@ -87,7 +85,6 @@ const useDeckQueryMock = useDeckQuery as jest.Mock;
 const useAuthFailureRedirectMock = useAuthFailureRedirect as jest.Mock;
 const useAddDeckWordsMock = useAddDeckWords as jest.Mock;
 const useRemoveDeckWordMock = useRemoveDeckWord as jest.Mock;
-const useCancelScheduledReviewMock = useCancelScheduledReview as jest.Mock;
 const useScheduleUserWordMock = useScheduleUserWord as jest.Mock;
 const useScheduledReviewsQueryMock = useScheduledReviewsQuery as jest.Mock;
 const useUpdateVocabularyItemMock = useUpdateVocabularyItem as jest.Mock;
@@ -98,7 +95,6 @@ const router = {
 };
 const addDeckWords = jest.fn();
 const removeDeckWord = jest.fn();
-const cancelScheduledReview = jest.fn();
 const scheduleUserWord = jest.fn();
 const updateVocabularyItem = jest.fn();
 const refetchDeck = jest.fn();
@@ -111,7 +107,6 @@ describe("DeckDetailScreen", () => {
     jest.clearAllMocks();
     addDeckWords.mockReset().mockResolvedValue(undefined);
     removeDeckWord.mockReset().mockResolvedValue(undefined);
-    cancelScheduledReview.mockReset().mockResolvedValue(undefined);
     scheduleUserWord.mockReset().mockResolvedValue(undefined);
     updateVocabularyItem.mockReset().mockResolvedValue(undefined);
 
@@ -121,9 +116,6 @@ describe("DeckDetailScreen", () => {
     useDeckQueryMock.mockReturnValue(createDeckQuery(deck));
     useAddDeckWordsMock.mockReturnValue(createMutation(addDeckWords));
     useRemoveDeckWordMock.mockReturnValue(createMutation(removeDeckWord));
-    useCancelScheduledReviewMock.mockReturnValue(
-      createMutation(cancelScheduledReview),
-    );
     useScheduleUserWordMock.mockReturnValue(createMutation(scheduleUserWord));
     useScheduledReviewsQueryMock.mockReturnValue({
       data: { items: [] },
@@ -224,7 +216,7 @@ describe("DeckDetailScreen", () => {
     expect(addDeckWords).not.toHaveBeenCalled();
   });
 
-  it("marks a word as mastered and cancels its active schedule", async () => {
+  it("marks a word as mastered with one atomic API command", async () => {
     useScheduledReviewsQueryMock.mockReturnValue({
       data: { items: [createScheduledReviewItem()] },
       error: null,
@@ -241,7 +233,6 @@ describe("DeckDetailScreen", () => {
         id: "vocabulary-item-1",
         data: { status: "MASTERED" },
       });
-      expect(cancelScheduledReview).toHaveBeenCalledWith("schedule-1");
       expect(screen.getByText("hello marked as mastered.")).toBeTruthy();
     });
   });

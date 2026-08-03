@@ -26,5 +26,5 @@ export function updateVocabularyItem(id: string, input: UpdateVocabularyItemRequ
 }
 
 export function archiveVocabularyItem(id: string) {
-  return authClient.delete<VocabularyItem>(`/vocabulary/items/${id}`);
+  return authClient.delete<void>(`/vocabulary/items/${id}`);
 }

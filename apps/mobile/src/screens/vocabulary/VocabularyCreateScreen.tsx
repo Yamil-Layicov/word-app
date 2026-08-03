@@ -34,7 +34,7 @@ export function VocabularyCreateScreen() {
   const [cefrLevel, setCefrLevel] = useState<CefrLevel>("A1");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState<string | null>(null);
-  const hasUnauthorizedError = useAuthFailureRedirect(createVocabularyItemMutation.error);
+  useAuthFailureRedirect(createVocabularyItemMutation.error);
 
   const handleCreate = async () => {
     const nextErrors: FieldErrors = {};
@@ -103,7 +103,7 @@ export function VocabularyCreateScreen() {
         params: { id: item.id },
       });
     } catch (error) {
-      if (!hasUnauthorizedError) {
+      if (!isApiError(error) || error.status !== 401) {
         setNotice(isApiError(error) ? error.message : "Could not create word.");
       }
     }

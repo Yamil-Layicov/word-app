@@ -8,11 +8,23 @@ import { practiceItemQueryKeys } from "@/entities/practice";
 import { reviewQueryKeys } from "@/entities/review";
 import { vocabularyItemQueryKeys } from "@/entities/vocabulary-item";
 import { queryClient } from "@/shared/lib/query-client";
-import { answerScheduledReview } from "../api";
-import { useAnswerScheduledReview } from "../hooks";
+import {
+  answerScheduledReview,
+  cancelScheduledReview,
+  scheduleUserWord,
+  startScheduledReviewBox,
+} from "../api";
+import {
+  useAnswerScheduledReview,
+  useCancelScheduledReview,
+  useScheduleUserWord,
+  useStartScheduledReviewBox,
+} from "../hooks";
 import type {
   AnswerScheduledReviewRequest,
   AnswerScheduledReviewResponse,
+  ScheduledReviewInterval,
+  ScheduleUserWordRequest,
 } from "../model";
 import { scheduledReviewQueryKeys } from "../query-keys";
 
@@ -34,6 +46,9 @@ jest.mock("@/shared/lib/query-client", () => ({
 }));
 
 const mockAnswerScheduledReview = jest.mocked(answerScheduledReview);
+const mockCancelScheduledReview = jest.mocked(cancelScheduledReview);
+const mockScheduleUserWord = jest.mocked(scheduleUserWord);
+const mockStartScheduledReviewBox = jest.mocked(startScheduledReviewBox);
 const mockInvalidateQueries = jest.mocked(queryClient.invalidateQueries);
 
 type MutationOptions<TVariables> = {
@@ -69,6 +84,24 @@ function getAnswerMutationOptions(): MutationOptions<AnswerScheduledReviewReques
   return result.current as unknown as MutationOptions<AnswerScheduledReviewRequest>;
 }
 
+function getScheduleMutationOptions(): MutationOptions<ScheduleUserWordRequest> {
+  const { result } = renderHook(() => useScheduleUserWord());
+
+  return result.current as unknown as MutationOptions<ScheduleUserWordRequest>;
+}
+
+function getStartMutationOptions(): MutationOptions<ScheduledReviewInterval> {
+  const { result } = renderHook(() => useStartScheduledReviewBox());
+
+  return result.current as unknown as MutationOptions<ScheduledReviewInterval>;
+}
+
+function getCancelMutationOptions(): MutationOptions<string> {
+  const { result } = renderHook(() => useCancelScheduledReview());
+
+  return result.current as unknown as MutationOptions<string>;
+}
+
 describe("scheduled review mutation cache invalidation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -82,17 +115,44 @@ describe("scheduled review mutation cache invalidation", () => {
     mutation.onSuccess();
 
     expect(mockAnswerScheduledReview).toHaveBeenCalledWith(request);
-    expect(
-      mockInvalidateQueries.mock.calls.map(([filters]) => filters),
-    ).toEqual([
-      { queryKey: scheduledReviewQueryKeys.all },
-      { queryKey: vocabularyItemQueryKeys.lists() },
-      { queryKey: vocabularyItemQueryKeys.details() },
-      { queryKey: reviewQueryKeys.all },
-      { queryKey: practiceItemQueryKeys.lists() },
-      { queryKey: masteredCollectionQueryKeys.all },
-      { queryKey: deckQueryKeys.all },
-    ]);
+    expectAllAffectedCachesInvalidated();
+  });
+
+  it("invalidates affected caches after scheduling a word", async () => {
+    const scheduleRequest: ScheduleUserWordRequest = {
+      userWordId: "user-word-1",
+      interval: "ONE_DAY",
+    };
+    mockScheduleUserWord.mockResolvedValue({} as never);
+    const mutation = getScheduleMutationOptions();
+
+    await mutation.mutationFn(scheduleRequest);
+    mutation.onSuccess();
+
+    expect(mockScheduleUserWord).toHaveBeenCalledWith(scheduleRequest);
+    expectAllAffectedCachesInvalidated();
+  });
+
+  it("invalidates affected caches after starting one review box", async () => {
+    mockStartScheduledReviewBox.mockResolvedValue({} as never);
+    const mutation = getStartMutationOptions();
+
+    await mutation.mutationFn("SIX_HOURS");
+    mutation.onSuccess();
+
+    expect(mockStartScheduledReviewBox).toHaveBeenCalledWith("SIX_HOURS");
+    expectAllAffectedCachesInvalidated();
+  });
+
+  it("invalidates affected caches after cancelling a schedule", async () => {
+    mockCancelScheduledReview.mockResolvedValue(undefined);
+    const mutation = getCancelMutationOptions();
+
+    await mutation.mutationFn("schedule-1");
+    mutation.onSuccess();
+
+    expect(mockCancelScheduledReview).toHaveBeenCalledWith("schedule-1");
+    expectAllAffectedCachesInvalidated();
   });
 
   it("does not invalidate caches when saving the answer fails", async () => {
@@ -106,3 +166,17 @@ describe("scheduled review mutation cache invalidation", () => {
     expect(mockInvalidateQueries).not.toHaveBeenCalled();
   });
 });
+
+function expectAllAffectedCachesInvalidated() {
+  expect(
+    mockInvalidateQueries.mock.calls.map(([filters]) => filters),
+  ).toEqual([
+    { queryKey: scheduledReviewQueryKeys.all },
+    { queryKey: vocabularyItemQueryKeys.lists() },
+    { queryKey: vocabularyItemQueryKeys.details() },
+    { queryKey: reviewQueryKeys.all },
+    { queryKey: practiceItemQueryKeys.lists() },
+    { queryKey: masteredCollectionQueryKeys.all },
+    { queryKey: deckQueryKeys.all },
+  ]);
+}

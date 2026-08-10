@@ -21,16 +21,18 @@ import {
   useScheduleUserWord,
   type ScheduledReviewInterval,
 } from "@/features/review-boxes";
+import { useDeleteVocabularyItemPermanently } from "@/features/vocabulary";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
+import { PermanentDeleteWordModal } from "@/screens/vocabulary/PermanentDeleteWordModal";
 import { VocabularyWordRow } from "@/screens/vocabulary/VocabularyWordRow";
 import { ReviewModePicker } from "@/screens/review-boxes/ReviewModePicker";
 import { ScheduledWordActionSheet } from "@/screens/review-boxes/ScheduledWordActionSheet";
 import { MasteredWordActionSheet } from "./MasteredWordActionSheet";
 
-type ActionMode = "actions" | "schedule" | null;
+type ActionMode = "actions" | "delete" | "schedule" | null;
 type ConfirmMode = "collection" | "word" | null;
 
 type Feedback = {
@@ -48,6 +50,7 @@ export function MasteredCollectionDetailScreen() {
   const removeWordMutation = useRemoveMasteredCollectionWord();
   const deleteCollectionMutation = useDeleteMasteredCollection();
   const scheduleMutation = useScheduleUserWord();
+  const deleteWordMutation = useDeleteVocabularyItemPermanently();
   const [selectedWord, setSelectedWord] =
     useState<MasteredCollectionWord | null>(null);
   const [actionMode, setActionMode] = useState<ActionMode>(null);
@@ -58,13 +61,21 @@ export function MasteredCollectionDetailScreen() {
   const isUpdating =
     removeWordMutation.isPending ||
     deleteCollectionMutation.isPending ||
-    scheduleMutation.isPending;
+    scheduleMutation.isPending ||
+    deleteWordMutation.isPending;
   const hasUnauthorizedError = useAuthFailureRedirect(
     collectionQuery.error ??
       removeWordMutation.error ??
       deleteCollectionMutation.error ??
-      scheduleMutation.error,
+      scheduleMutation.error ??
+      deleteWordMutation.error,
   );
+  const deleteWordErrorMessage =
+    deleteWordMutation.error && !hasUnauthorizedError
+      ? isApiError(deleteWordMutation.error)
+        ? deleteWordMutation.error.message
+        : "Could not permanently delete this word."
+      : null;
 
   const scheduleSelectedWord = async (interval: ScheduledReviewInterval) => {
     if (!selectedWord) {
@@ -152,6 +163,27 @@ export function MasteredCollectionDetailScreen() {
           tone: "error",
         });
       }
+    }
+  };
+
+  const deleteSelectedWordPermanently = async () => {
+    if (!selectedWord || deleteWordMutation.isPending) {
+      return;
+    }
+
+    const word = selectedWord;
+    setFeedback(null);
+
+    try {
+      await deleteWordMutation.mutateAsync(word.id);
+      setSelectedWord(null);
+      setActionMode(null);
+      setFeedback({
+        message: `${word.sourceText} permanently deleted.`,
+        tone: "success",
+      });
+    } catch {
+      // Keep the confirmation open so the user can retry or cancel.
     }
   };
 
@@ -259,6 +291,7 @@ export function MasteredCollectionDetailScreen() {
           key={item.collectionWordId}
           item={item}
           onMenuPress={() => {
+            deleteWordMutation.reset();
             setSelectedWord(item);
             setActionMode("actions");
           }}
@@ -279,11 +312,29 @@ export function MasteredCollectionDetailScreen() {
           setSelectedWord(null);
           setActionMode(null);
         }}
+        onDeletePermanently={() => setActionMode("delete")}
         onRemoveFromCollection={() => {
           setActionMode(null);
           setConfirmMode("word");
         }}
         onReviewLater={() => setActionMode("schedule")}
+      />
+
+      <PermanentDeleteWordModal
+        errorMessage={deleteWordErrorMessage}
+        loading={deleteWordMutation.isPending}
+        sourceText={selectedWord?.sourceText ?? "Word"}
+        visible={actionMode === "delete"}
+        onCancel={() => {
+          if (!deleteWordMutation.isPending) {
+            deleteWordMutation.reset();
+            setSelectedWord(null);
+            setActionMode(null);
+          }
+        }}
+        onConfirm={() => {
+          void deleteSelectedWordPermanently();
+        }}
       />
 
       <ScheduledWordActionSheet

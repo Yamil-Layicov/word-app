@@ -28,3 +28,7 @@ export function updateVocabularyItem(id: string, input: UpdateVocabularyItemRequ
 export function archiveVocabularyItem(id: string) {
   return authClient.delete<void>(`/vocabulary/items/${id}`);
 }
+
+export function deleteVocabularyItemPermanently(id: string) {
+  return authClient.delete<void>(`/vocabulary/items/${id}/permanent`);
+}

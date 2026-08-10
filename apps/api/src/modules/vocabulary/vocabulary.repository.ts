@@ -64,6 +64,8 @@ type ArchiveUserVocabularyItemInput = {
   languagePairId: string;
 };
 
+type DeleteUserVocabularyItemInput = ArchiveUserVocabularyItemInput;
+
 const vocabularyExampleSelect = {
   id: true,
   sourceSentence: true,
@@ -380,6 +382,23 @@ export class VocabularyRepository {
       },
       data: {
         status: UserWordStatus.ARCHIVED,
+      },
+    });
+
+    return result.count > 0;
+  }
+
+  async deleteUserVocabularyItemPermanently(
+    input: DeleteUserVocabularyItemInput,
+  ): Promise<boolean> {
+    const result = await this.prisma.userWord.deleteMany({
+      where: {
+        userId: input.userId,
+        vocabularyItemId: input.vocabularyItemId,
+        vocabularyItem: {
+          languagePairId: input.languagePairId,
+          isActive: true,
+        },
       },
     });
 

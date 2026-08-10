@@ -19,6 +19,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   AudienceScope,
   CefrLevel,
+  DeckPurpose,
+  PracticeMode,
+  ReviewRating,
   ScheduledReviewInterval,
   ScheduledReviewState,
   UserWordStatus,
@@ -608,6 +611,110 @@ describe('VocabularyController (e2e)', () => {
     expect(archivedList.items.some((item) => item.id === createdItem.id)).toBe(
       true,
     );
+  });
+
+  it('should permanently delete only the user-owned word data', async () => {
+    const createdItem = await createVocabularyItem('permanent-delete');
+    const learningDeck = await prisma.deck.create({
+      data: {
+        userId,
+        languagePairId,
+        title: `Learning deck ${runId}`,
+        purpose: DeckPurpose.LEARNING,
+      },
+    });
+    const masteredCollection = await prisma.deck.create({
+      data: {
+        userId,
+        languagePairId,
+        title: `Mastered collection ${runId}`,
+        purpose: DeckPurpose.MASTERED_COLLECTION,
+      },
+    });
+
+    await prisma.deckCard.createMany({
+      data: [learningDeck.id, masteredCollection.id].map((deckId) => ({
+        deckId,
+        userWordId: createdItem.userWord.id,
+      })),
+    });
+    await prisma.userWordSchedule.create({
+      data: {
+        userId,
+        userWordId: createdItem.userWord.id,
+        interval: ScheduledReviewInterval.ONE_DAY,
+        state: ScheduledReviewState.QUEUED,
+      },
+    });
+    await prisma.reviewLog.create({
+      data: {
+        userId,
+        userWordId: createdItem.userWord.id,
+        vocabularyItemId: createdItem.id,
+        rating: ReviewRating.GOOD,
+        isCorrect: true,
+      },
+    });
+    await prisma.practiceLog.create({
+      data: {
+        userId,
+        userWordId: createdItem.userWord.id,
+        vocabularyItemId: createdItem.id,
+        practiceMode: PracticeMode.FLASHCARD,
+        isCorrect: true,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .delete(`/vocabulary/items/${createdItem.id}/permanent`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(204);
+
+    await expect(
+      prisma.userWord.findUnique({
+        where: { id: createdItem.userWord.id },
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.deckCard.count({
+        where: { userWordId: createdItem.userWord.id },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.userWordSchedule.count({
+        where: { userWordId: createdItem.userWord.id },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.reviewLog.count({
+        where: { userWordId: createdItem.userWord.id },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.practiceLog.count({
+        where: { userWordId: createdItem.userWord.id },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.vocabularyItem.findUnique({
+        where: { id: createdItem.id },
+      }),
+    ).resolves.not.toBeNull();
+    await expect(
+      prisma.deck.count({
+        where: { id: { in: [learningDeck.id, masteredCollection.id] } },
+      }),
+    ).resolves.toBe(2);
+
+    await request(app.getHttpServer())
+      .get(`/vocabulary/items/${createdItem.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .delete(`/vocabulary/items/${createdItem.id}/permanent`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(404);
   });
 
   /**

@@ -191,6 +191,26 @@ export class VocabularyService {
     }
   }
 
+  async deleteUserItemPermanently(
+    currentUser: AuthenticatedUser,
+    vocabularyItemId: string,
+  ): Promise<void> {
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+
+    const isDeleted =
+      await this.vocabularyRepository.deleteUserVocabularyItemPermanently({
+        userId: currentUser.id,
+        vocabularyItemId,
+        languagePairId: activeLanguagePairId,
+      });
+
+    if (!isDeleted) {
+      throw new NotFoundException('Vocabulary item not found');
+    }
+  }
+
   private async getActiveLanguagePairId(userId: string): Promise<string> {
     const userContext = await this.vocabularyRepository.findUserContext(userId);
 

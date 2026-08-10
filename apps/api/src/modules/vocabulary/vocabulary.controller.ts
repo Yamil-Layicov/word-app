@@ -79,4 +79,17 @@ export class VocabularyController {
       vocabularyItemId,
     );
   }
+
+  @Delete('items/:id/permanent')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(AccessTokenGuard)
+  deleteUserItemPermanently(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') vocabularyItemId: string,
+  ) {
+    return this.vocabularyService.deleteUserItemPermanently(
+      currentUser,
+      vocabularyItemId,
+    );
+  }
 }

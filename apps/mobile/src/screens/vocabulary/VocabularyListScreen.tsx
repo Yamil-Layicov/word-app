@@ -19,19 +19,28 @@ import {
   type ReviewInterval,
   type ScheduledReviewItem,
 } from "@/features/review-boxes";
-import { useUpdateVocabularyItem } from "@/features/vocabulary";
+import {
+  useDeleteVocabularyItemPermanently,
+  useUpdateVocabularyItem,
+} from "@/features/vocabulary";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
+import { PermanentDeleteWordModal } from "./PermanentDeleteWordModal";
 import { VocabularyWordRow } from "./VocabularyWordRow";
 
 export function VocabularyListScreen() {
   const router = useRouter();
   const [selectedItem, setSelectedItem] = useState<VocabularyItem | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<VocabularyItem | null>(
+    null,
+  );
   const [notice, setNotice] = useState<string | null>(null);
   const updateVocabularyItemMutation = useUpdateVocabularyItem();
+  const deleteVocabularyItemMutation =
+    useDeleteVocabularyItemPermanently();
   const scheduleUserWordMutation = useScheduleUserWord();
   const scheduledReviewsQuery = useScheduledReviewsQuery();
   const vocabularyQuery = useInfiniteVocabularyItemsQuery({ limit: 20 });
@@ -39,7 +48,8 @@ export function VocabularyListScreen() {
     vocabularyQuery.error ??
       scheduledReviewsQuery.error ??
       updateVocabularyItemMutation.error ??
-      scheduleUserWordMutation.error,
+      scheduleUserWordMutation.error ??
+      deleteVocabularyItemMutation.error,
   );
   const items = vocabularyQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const scheduledByVocabularyItemId = useMemo(
@@ -52,6 +62,12 @@ export function VocabularyListScreen() {
       ),
     [scheduledReviewsQuery.data?.items],
   );
+  const deleteErrorMessage =
+    deleteVocabularyItemMutation.error && !hasUnauthorizedError
+      ? isApiError(deleteVocabularyItemMutation.error)
+        ? deleteVocabularyItemMutation.error.message
+        : "Could not permanently delete this word."
+      : null;
 
   const handleScheduleWord = async (item: VocabularyItem, interval: ReviewInterval) => {
     setNotice(null);
@@ -88,6 +104,23 @@ export function VocabularyListScreen() {
       if (!isApiError(error) || error.status !== 401) {
         setNotice(isApiError(error) ? error.message : "Could not update this word.");
       }
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!deleteCandidate || deleteVocabularyItemMutation.isPending) {
+      return;
+    }
+
+    const word = deleteCandidate;
+    setNotice(null);
+
+    try {
+      await deleteVocabularyItemMutation.mutateAsync(word.id);
+      setDeleteCandidate(null);
+      setNotice(`${word.sourceText} permanently deleted.`);
+    } catch {
+      // Keep the confirmation open so the user can retry or cancel.
     }
   };
 
@@ -134,7 +167,10 @@ export function VocabularyListScreen() {
           item={item}
           scheduledWord={toScheduledWordPreview(scheduledByVocabularyItemId.get(item.id))}
           showScheduledOverlay
-          onMenuPress={() => setSelectedItem(item)}
+          onMenuPress={() => {
+            deleteVocabularyItemMutation.reset();
+            setSelectedItem(item);
+          }}
           onPress={() =>
             router.push({
               pathname: "/vocabulary/[id]",
@@ -161,13 +197,35 @@ export function VocabularyListScreen() {
         item={selectedItem}
         isUpdating={
           updateVocabularyItemMutation.isPending ||
-          scheduleUserWordMutation.isPending
+          scheduleUserWordMutation.isPending ||
+          deleteVocabularyItemMutation.isPending
         }
         onClose={() => setSelectedItem(null)}
+        onDeletePermanently={(item) => {
+          deleteVocabularyItemMutation.reset();
+          setSelectedItem(null);
+          setDeleteCandidate(item);
+        }}
         onMarkKnown={(item) => {
           void handleMarkKnown(item);
         }}
         onSchedule={handleScheduleWord}
+      />
+
+      <PermanentDeleteWordModal
+        errorMessage={deleteErrorMessage}
+        loading={deleteVocabularyItemMutation.isPending}
+        sourceText={deleteCandidate?.sourceText ?? "Word"}
+        visible={Boolean(deleteCandidate)}
+        onCancel={() => {
+          if (!deleteVocabularyItemMutation.isPending) {
+            deleteVocabularyItemMutation.reset();
+            setDeleteCandidate(null);
+          }
+        }}
+        onConfirm={() => {
+          void handlePermanentDelete();
+        }}
       />
     </ScreenContainer>
   );
@@ -177,6 +235,7 @@ type WordActionSheetProps = {
   item: VocabularyItem | null;
   isUpdating: boolean;
   onClose: () => void;
+  onDeletePermanently: (item: VocabularyItem) => void;
   onMarkKnown: (item: VocabularyItem) => void;
   onSchedule: (item: VocabularyItem, interval: ReviewInterval) => void;
 };
@@ -185,6 +244,7 @@ function WordActionSheet({
   item,
   isUpdating,
   onClose,
+  onDeletePermanently,
   onMarkKnown,
   onSchedule,
 }: WordActionSheetProps) {
@@ -216,6 +276,13 @@ function WordActionSheet({
                 label={item.userWord.status === "MASTERED" ? "Already mastered" : "I know this word"}
                 onPress={() => onMarkKnown(item)}
               />
+              <ActionButton
+                danger
+                disabled={isUpdating}
+                icon="trash-bin-outline"
+                label="Delete permanently"
+                onPress={() => onDeletePermanently(item)}
+              />
             </View>
           ) : null}
         </Pressable>
@@ -225,13 +292,20 @@ function WordActionSheet({
 }
 
 type ActionButtonProps = {
+  danger?: boolean;
   disabled?: boolean;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
 };
 
-function ActionButton({ disabled = false, icon, label, onPress }: ActionButtonProps) {
+function ActionButton({
+  danger = false,
+  disabled = false,
+  icon,
+  label,
+  onPress,
+}: ActionButtonProps) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -239,13 +313,24 @@ function ActionButton({ disabled = false, icon, label, onPress }: ActionButtonPr
       disabled={disabled}
       style={({ pressed }) => [
         styles.actionButton,
+        danger ? styles.actionButtonDanger : null,
         disabled ? styles.actionButtonDisabled : null,
         pressed ? styles.pressed : null,
       ]}
       onPress={onPress}
     >
-      <Ionicons name={icon} size={20} color={disabled ? colors.textMuted : colors.navy} />
-      <Text style={[styles.actionButtonText, disabled ? styles.actionButtonTextDisabled : null]}>
+      <Ionicons
+        name={icon}
+        size={20}
+        color={disabled ? colors.textMuted : danger ? colors.error : colors.navy}
+      />
+      <Text
+        style={[
+          styles.actionButtonText,
+          danger ? styles.actionButtonTextDanger : null,
+          disabled ? styles.actionButtonTextDisabled : null,
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -495,6 +580,10 @@ const styles = StyleSheet.create({
   actionButtonDisabled: {
     opacity: 0.56,
   },
+  actionButtonDanger: {
+    borderColor: "#F0B8B0",
+    backgroundColor: "#FFF1F1",
+  },
   actionButtonText: {
     color: colors.text,
     fontSize: 15,
@@ -503,6 +592,9 @@ const styles = StyleSheet.create({
   },
   actionButtonTextDisabled: {
     color: colors.textMuted,
+  },
+  actionButtonTextDanger: {
+    color: colors.error,
   },
   pressed: {
     opacity: 0.72,

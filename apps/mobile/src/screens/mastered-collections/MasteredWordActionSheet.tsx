@@ -7,6 +7,7 @@ type MasteredWordActionSheetProps = {
   disabled: boolean;
   onAddToCollection?: () => void;
   onClose: () => void;
+  onDeletePermanently: () => void;
   onRemoveFromCollection?: () => void;
   onReviewLater: () => void;
   title: string;
@@ -17,6 +18,7 @@ export function MasteredWordActionSheet({
   disabled,
   onAddToCollection,
   onClose,
+  onDeletePermanently,
   onRemoveFromCollection,
   onReviewLater,
   title,
@@ -60,6 +62,13 @@ export function MasteredWordActionSheet({
               onPress={onRemoveFromCollection}
             />
           ) : null}
+          <ActionRow
+            danger
+            disabled={disabled}
+            icon="trash-bin-outline"
+            label="Delete permanently"
+            onPress={onDeletePermanently}
+          />
         </Pressable>
       </Pressable>
     </Modal>

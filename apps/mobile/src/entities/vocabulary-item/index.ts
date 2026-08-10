@@ -1,6 +1,7 @@
 export {
   archiveVocabularyItem,
   createVocabularyItem,
+  deleteVocabularyItemPermanently,
   getVocabularyItem,
   listVocabularyItems,
   updateVocabularyItem,

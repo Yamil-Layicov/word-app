@@ -3,10 +3,12 @@ import { useMutation } from "@tanstack/react-query";
 import {
   addDeckWords,
   createDeck,
+  deleteDeck,
   deckQueryKeys,
   removeDeckWord,
   type AddDeckWordsRequest,
   type CreateDeckRequest,
+  type DecksResponse,
 } from "@/entities/deck";
 import { vocabularyItemQueryKeys } from "@/entities/vocabulary-item";
 import { scheduledReviewQueryKeys } from "@/features/review-boxes";
@@ -17,6 +19,29 @@ export function useCreateDeck() {
     mutationFn: (input: CreateDeckRequest) => createDeck(input),
     onSuccess: (deck) => {
       queryClient.setQueryData(deckQueryKeys.detail(deck.id), deck);
+      void queryClient.invalidateQueries({ queryKey: deckQueryKeys.lists() });
+    },
+  });
+}
+
+export function useDeleteDeck() {
+  return useMutation({
+    mutationFn: (deckId: string) => deleteDeck(deckId),
+    onSuccess: (_data, deckId) => {
+      queryClient.setQueryData<DecksResponse>(
+        deckQueryKeys.list(),
+        (current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.filter((deck) => deck.id !== deckId),
+              }
+            : current,
+      );
+      queryClient.removeQueries({
+        exact: true,
+        queryKey: deckQueryKeys.detail(deckId),
+      });
       void queryClient.invalidateQueries({ queryKey: deckQueryKeys.lists() });
     },
   });

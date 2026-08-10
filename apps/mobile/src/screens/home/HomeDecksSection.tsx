@@ -5,12 +5,12 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 
 import { type DeckSummary, useDecksQuery } from "@/entities/deck";
 import { useAuthFailureRedirect } from "@/features/auth";
-import { useCreateDeck } from "@/features/decks";
+import { useCreateDeck, useDeleteDeck } from "@/features/decks";
 import { isApiError } from "@/shared/api/http-error";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
-type DeckModalMode = "actions" | "reset" | "export" | "delete" | null;
+type DeckModalMode = "actions" | "reset" | "export" | "deleteDeck" | null;
 
 const EMPTY_DECKS: DeckSummary[] = [];
 
@@ -20,10 +20,12 @@ export function HomeDecksSection() {
   const [isCreateDeckModalVisible, setCreateDeckModalVisible] = useState(false);
   const [deckModalMode, setDeckModalMode] = useState<DeckModalMode>(null);
   const [selectedDeck, setSelectedDeck] = useState<DeckSummary | null>(null);
+  const [deleteDeckError, setDeleteDeckError] = useState<unknown>(null);
   const decksQuery = useDecksQuery();
   const createDeckMutation = useCreateDeck();
+  const deleteDeckMutation = useDeleteDeck();
   const hasUnauthorizedError = useAuthFailureRedirect(
-    decksQuery.error ?? createDeckMutation.error,
+    decksQuery.error ?? createDeckMutation.error ?? deleteDeckError,
   );
   const decks = decksQuery.data?.items ?? EMPTY_DECKS;
   const hasActiveSearch = searchText.trim().length > 0;
@@ -36,6 +38,39 @@ export function HomeDecksSection() {
 
     return decks.filter((deck) => deck.title.toLowerCase().includes(search));
   }, [decks, searchText]);
+
+  const closeDeckModals = () => {
+    if (deleteDeckMutation.isPending) {
+      return;
+    }
+
+    setDeckModalMode(null);
+    setSelectedDeck(null);
+    setDeleteDeckError(null);
+  };
+
+  const handleDeleteDeck = async () => {
+    if (!selectedDeck || deleteDeckMutation.isPending) {
+      return;
+    }
+
+    setDeleteDeckError(null);
+
+    try {
+      await deleteDeckMutation.mutateAsync(selectedDeck.id);
+      setDeckModalMode(null);
+      setSelectedDeck(null);
+    } catch (error) {
+      setDeleteDeckError(error);
+    }
+  };
+
+  const deleteDeckErrorMessage =
+    deleteDeckError && !hasUnauthorizedError
+      ? isApiError(deleteDeckError)
+        ? deleteDeckError.message
+        : "Could not delete this deck. Try again."
+      : null;
 
   return (
     <View style={styles.section}>
@@ -111,6 +146,7 @@ export function HomeDecksSection() {
                 })
               }
               onPlayPress={() => {
+                setDeleteDeckError(null);
                 setSelectedDeck(deck);
                 setDeckModalMode("actions");
               }}
@@ -120,10 +156,21 @@ export function HomeDecksSection() {
       ) : null}
 
       <DeckActionModals
+        deck={selectedDeck}
+        deleteError={deleteDeckErrorMessage}
+        deletePending={deleteDeckMutation.isPending}
         mode={deckModalMode}
-        wordCount={selectedDeck?.wordCount ?? 0}
-        onClose={() => setDeckModalMode(null)}
-        onModeChange={setDeckModalMode}
+        onClose={closeDeckModals}
+        onDelete={() => {
+          void handleDeleteDeck();
+        }}
+        onModeChange={(mode) => {
+          if (mode !== "deleteDeck") {
+            setDeleteDeckError(null);
+          }
+
+          setDeckModalMode(mode);
+        }}
       />
       <CreateDeckModal
         error={createDeckMutation.error}
@@ -163,7 +210,7 @@ function HomeDeckCard({ deck, onPlayPress, onPress }: HomeDeckCardProps) {
         <Text numberOfLines={1} style={styles.cardMeta}>
           {deck.wordCount} {deck.wordCount === 1 ? "word" : "words"}
           {deck.isDefault ? " - Default" : ""}
-        </Text> 
+        </Text>
         <View style={styles.progressRow}>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${deck.progressPercent}%` }]} />
@@ -185,10 +232,13 @@ function HomeDeckCard({ deck, onPlayPress, onPress }: HomeDeckCardProps) {
 }
 
 type DeckActionModalsProps = {
+  deck: DeckSummary | null;
+  deleteError: string | null;
+  deletePending: boolean;
   mode: DeckModalMode;
   onClose: () => void;
+  onDelete: () => void;
   onModeChange: (mode: DeckModalMode) => void;
-  wordCount: number;
 };
 
 type CreateDeckModalProps = {
@@ -314,15 +364,23 @@ function CreateDeckModal({ error, loading, onClose, onCreate, visible }: CreateD
   );
 }
 
-function DeckActionModals({ mode, onClose, onModeChange, wordCount }: DeckActionModalsProps) {
+function DeckActionModals({
+  deck,
+  deleteError,
+  deletePending,
+  mode,
+  onClose,
+  onDelete,
+  onModeChange,
+}: DeckActionModalsProps) {
   const [dontShowExportAgain, setDontShowExportAgain] = useState(false);
 
-  if (!mode) {
+  if (!mode || !deck) {
     return null;
   }
 
   return (
-    <Modal animationType="fade" transparent visible onRequestClose={onClose}>
+    <Modal animationType="fade" transparent visible onRequestClose={deletePending ? () => undefined : onClose}>
       {mode === "actions" ? (
         <Pressable style={styles.modalOverlay} onPress={onClose}>
           <Pressable style={styles.gamePickerLayer} onPress={() => undefined}>
@@ -337,13 +395,13 @@ function DeckActionModals({ mode, onClose, onModeChange, wordCount }: DeckAction
                 accent="orange"
                 icon="sync-outline"
                 title="Repeat"
-                subtitle={`Repeat ${wordCount} ${wordCount === 1 ? "word" : "words"}`}
+                subtitle={`Repeat ${deck.wordCount} ${deck.wordCount === 1 ? "word" : "words"}`}
               />
               <GameOption icon="albums-outline" title="Review words" />
               <GameOption
                 icon="ticket-outline"
                 title="One game"
-                subtitle={`Left ${wordCount} ${wordCount === 1 ? "word" : "words"}`}
+                subtitle={`Left ${deck.wordCount} ${deck.wordCount === 1 ? "word" : "words"}`}
               />
               <GameOption icon="phone-portrait-outline" title="Autoplay" showProgress />
             </View>
@@ -360,9 +418,9 @@ function DeckActionModals({ mode, onClose, onModeChange, wordCount }: DeckAction
                 onPress={() => onModeChange("export")}
               />
               <RoundToolButton
-                accessibilityLabel="Delete words"
+                accessibilityLabel="Delete deck"
                 icon="trash-outline"
-                onPress={() => onModeChange("delete")}
+                onPress={() => onModeChange("deleteDeck")}
               />
             </View>
           </Pressable>
@@ -379,13 +437,17 @@ function DeckActionModals({ mode, onClose, onModeChange, wordCount }: DeckAction
         />
       ) : null}
 
-      {mode === "delete" ? (
+      {mode === "deleteDeck" ? (
         <ConfirmDialog
+          cancelLabel="Cancel"
+          confirmLabel="Delete"
           confirmTone="danger"
-          message={`Are you sure you want to delete ${wordCount} ${wordCount === 1 ? "word" : "words"}?`}
-          title="Delete words"
+          error={deleteError}
+          loading={deletePending}
+          message={getDeleteDeckMessage(deck)}
+          title={`Delete "${deck.title}"?`}
           onCancel={() => onModeChange("actions")}
-          onConfirm={onClose}
+          onConfirm={onDelete}
         />
       ) : null}
 
@@ -447,14 +509,28 @@ function RoundToolButton({ accessibilityLabel, icon, onPress }: RoundToolButtonP
 }
 
 type ConfirmDialogProps = {
+  cancelLabel?: string;
+  confirmLabel?: string;
   confirmTone: "orange" | "danger";
+  error?: string | null;
+  loading?: boolean;
   message: string;
   onCancel: () => void;
   onConfirm: () => void;
   title: string;
 };
 
-function ConfirmDialog({ confirmTone, message, onCancel, onConfirm, title }: ConfirmDialogProps) {
+function ConfirmDialog({
+  cancelLabel = "No",
+  confirmLabel = "Yes",
+  confirmTone,
+  error,
+  loading = false,
+  message,
+  onCancel,
+  onConfirm,
+  title,
+}: ConfirmDialogProps) {
   const isDanger = confirmTone === "danger";
 
   return (
@@ -462,39 +538,56 @@ function ConfirmDialog({ confirmTone, message, onCancel, onConfirm, title }: Con
       <View style={[styles.confirmCard, isDanger ? styles.deleteConfirmCard : null]}>
         <Text style={styles.confirmTitle}>{title}</Text>
         <Text style={styles.confirmMessage}>{message}</Text>
+        {error ? <Text style={styles.confirmError}>{error}</Text> : null}
 
         <View style={styles.confirmActions}>
           <Pressable
             accessibilityRole="button"
+            disabled={loading}
             style={({ pressed }) => [
               styles.confirmButton,
               styles.confirmButtonSecondary,
               isDanger ? styles.confirmButtonSecondaryDanger : null,
+              loading ? styles.actionButtonDisabled : null,
               pressed ? styles.pressed : null,
             ]}
             onPress={onCancel}
           >
-            <Text style={[styles.confirmButtonSecondaryText, isDanger ? styles.confirmButtonSecondaryDangerText : null]}>
-              No
+            <Text
+              style={[styles.confirmButtonSecondaryText, isDanger ? styles.confirmButtonSecondaryDangerText : null]}
+            >
+              {cancelLabel}
             </Text>
           </Pressable>
 
           <Pressable
             accessibilityRole="button"
+            disabled={loading}
             style={({ pressed }) => [
               styles.confirmButton,
               styles.confirmButtonPrimary,
               isDanger ? styles.confirmButtonDanger : null,
+              loading ? styles.actionButtonDisabled : null,
               pressed ? styles.pressed : null,
             ]}
             onPress={onConfirm}
           >
-            <Text style={styles.confirmButtonPrimaryText}>Yes</Text>
+            <Text style={styles.confirmButtonPrimaryText}>{loading ? "Deleting..." : confirmLabel}</Text>
           </Pressable>
         </View>
       </View>
     </View>
   );
+}
+
+function getDeleteDeckMessage(deck: DeckSummary): string {
+  if (deck.wordCount === 0) {
+    return "This empty deck will be permanently removed.";
+  }
+
+  const wordLabel = deck.wordCount === 1 ? "word" : "words";
+
+  return `The deck and its organization will be removed. Its ${deck.wordCount} ${wordLabel}, learning progress, scheduled reviews and history will remain in My Vocabulary.`;
 }
 
 type ExportDialogProps = {
@@ -887,6 +980,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: typography.weights.regular,
     marginTop: spacing.lg,
+  },
+  confirmError: {
+    color: colors.error,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: typography.weights.bold,
+    marginTop: spacing.md,
   },
   confirmActions: {
     flexDirection: "row",

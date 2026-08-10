@@ -244,6 +244,19 @@ export class DecksRepository {
     return deck ? this.toDeckResult(deck) : null;
   }
 
+  async deleteDeck(input: FindDeckInput): Promise<boolean> {
+    const result = await this.prisma.deck.deleteMany({
+      where: {
+        id: input.deckId,
+        userId: input.userId,
+        languagePairId: input.languagePairId,
+        purpose: DeckPurpose.LEARNING,
+      },
+    });
+
+    return result.count > 0;
+  }
+
   async addWordsToDeck(input: AddDeckWordsInput): Promise<DeckResult | null> {
     return this.prisma.$transaction(async (tx) => {
       const deck = await tx.deck.findFirst({

@@ -1,11 +1,16 @@
 /// <reference types="jest" />
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react-native";
 import { useRouter } from "expo-router";
 
 import { useDecksQuery, type DeckSummary } from "@/entities/deck";
 import { useAuthFailureRedirect } from "@/features/auth";
-import { useCreateDeck } from "@/features/decks";
+import { useCreateDeck, useDeleteDeck } from "@/features/decks";
 import { HomeDecksSection } from "../HomeDecksSection";
 
 jest.mock("expo-router", () => ({
@@ -26,17 +31,20 @@ jest.mock("@/features/auth", () => ({
 
 jest.mock("@/features/decks", () => ({
   useCreateDeck: jest.fn(),
+  useDeleteDeck: jest.fn(),
 }));
 
 const useRouterMock = useRouter as jest.Mock;
 const useDecksQueryMock = useDecksQuery as jest.Mock;
 const useAuthFailureRedirectMock = useAuthFailureRedirect as jest.Mock;
 const useCreateDeckMock = useCreateDeck as jest.Mock;
+const useDeleteDeckMock = useDeleteDeck as jest.Mock;
 
 const router = {
   push: jest.fn(),
 };
 const createDeck = jest.fn();
+const deleteDeck = jest.fn();
 const refetchDecks = jest.fn();
 
 const deck = createDeckSummary();
@@ -45,12 +53,14 @@ describe("HomeDecksSection", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     createDeck.mockReset().mockResolvedValue(deck);
+    deleteDeck.mockReset().mockResolvedValue(undefined);
     refetchDecks.mockReset().mockResolvedValue(undefined);
 
     useRouterMock.mockReturnValue(router);
     useDecksQueryMock.mockReturnValue(createDecksQuery([deck]));
     useAuthFailureRedirectMock.mockReturnValue(false);
     useCreateDeckMock.mockReturnValue(createMutation(createDeck));
+    useDeleteDeckMock.mockReturnValue(createMutation(deleteDeck));
   });
 
   it("shows the loading state while the deck query is pending", () => {
@@ -158,6 +168,57 @@ describe("HomeDecksSection", () => {
         pathname: "/decks/category/[deckId]",
         params: { deckId: "deck-2" },
       });
+    });
+  });
+
+  it("confirms and deletes the deck selected from the game picker", async () => {
+    render(<HomeDecksSection />);
+
+    fireEvent.press(screen.getByRole("button", { name: "Open game picker" }));
+    fireEvent.press(screen.getByRole("button", { name: "Delete deck" }));
+
+    expect(screen.getByText('Delete "Travel words"?')).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The deck and its organization will be removed. Its 3 words, learning progress, scheduled reviews and history will remain in My Vocabulary.",
+      ),
+    ).toBeTruthy();
+
+    fireEvent.press(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(deleteDeck).toHaveBeenCalledWith("deck-1");
+      expect(screen.queryByText('Delete "Travel words"?')).toBeNull();
+    });
+  });
+
+  it("uses concise deletion copy for an empty deck", () => {
+    useDecksQueryMock.mockReturnValue(
+      createDecksQuery([createDeckSummary({ wordCount: 0 })]),
+    );
+    render(<HomeDecksSection />);
+
+    fireEvent.press(screen.getByRole("button", { name: "Open game picker" }));
+    fireEvent.press(screen.getByRole("button", { name: "Delete deck" }));
+
+    expect(
+      screen.getByText("This empty deck will be permanently removed."),
+    ).toBeTruthy();
+  });
+
+  it("keeps the confirmation open when deleting the deck fails", async () => {
+    deleteDeck.mockRejectedValueOnce(new Error("Network unavailable"));
+    render(<HomeDecksSection />);
+
+    fireEvent.press(screen.getByRole("button", { name: "Open game picker" }));
+    fireEvent.press(screen.getByRole("button", { name: "Delete deck" }));
+    fireEvent.press(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Could not delete this deck. Try again."),
+      ).toBeTruthy();
+      expect(screen.getByText('Delete "Travel words"?')).toBeTruthy();
     });
   });
 });

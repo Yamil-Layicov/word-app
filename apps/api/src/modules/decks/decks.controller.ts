@@ -42,6 +42,15 @@ export class DecksController {
     return this.decksService.getDeck(currentUser, deckId);
   }
 
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteDeck(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') deckId: string,
+  ) {
+    return this.decksService.deleteDeck(currentUser, deckId);
+  }
+
   @Post(':id/words')
   addWordsToDeck(
     @CurrentUser() currentUser: AuthenticatedUser,

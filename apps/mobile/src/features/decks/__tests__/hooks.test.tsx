@@ -5,11 +5,13 @@ import { renderHook } from "@testing-library/react-native";
 import {
   addDeckWords,
   createDeck,
+  deleteDeck,
   deckQueryKeys,
   removeDeckWord,
   type AddDeckWordsRequest,
   type CreateDeckRequest,
   type DeckDetail,
+  type DecksResponse,
 } from "@/entities/deck";
 import { vocabularyItemQueryKeys } from "@/entities/vocabulary-item";
 import { scheduledReviewQueryKeys } from "@/features/review-boxes";
@@ -17,6 +19,7 @@ import { queryClient } from "@/shared/lib/query-client";
 import {
   useAddDeckWords,
   useCreateDeck,
+  useDeleteDeck,
   useRemoveDeckWord,
 } from "../index";
 
@@ -28,25 +31,29 @@ jest.mock("@/entities/deck", () => ({
   ...jest.requireActual("@/entities/deck/query-keys"),
   addDeckWords: jest.fn(),
   createDeck: jest.fn(),
+  deleteDeck: jest.fn(),
   removeDeckWord: jest.fn(),
 }));
 
 jest.mock("@/shared/lib/query-client", () => ({
   queryClient: {
     invalidateQueries: jest.fn(),
+    removeQueries: jest.fn(),
     setQueryData: jest.fn(),
   },
 }));
 
 const mockAddDeckWords = jest.mocked(addDeckWords);
 const mockCreateDeck = jest.mocked(createDeck);
+const mockDeleteDeck = jest.mocked(deleteDeck);
 const mockRemoveDeckWord = jest.mocked(removeDeckWord);
 const mockInvalidateQueries = jest.mocked(queryClient.invalidateQueries);
+const mockRemoveQueries = jest.mocked(queryClient.removeQueries);
 const mockSetQueryData = jest.mocked(queryClient.setQueryData);
 
 type MutationOptions<TData, TVariables> = {
   mutationFn: (variables: TVariables) => Promise<TData>;
-  onSuccess: (data: TData) => void;
+  onSuccess: (data: TData, variables: TVariables) => void;
 };
 
 const deck = createDeckDetail();
@@ -66,13 +73,44 @@ describe("deck mutation cache behavior", () => {
     const mutation = getCreateDeckMutation();
 
     const response = await mutation.mutationFn(request);
-    mutation.onSuccess(response);
+    mutation.onSuccess(response, request);
 
     expect(mockCreateDeck).toHaveBeenCalledWith(request);
     expect(mockSetQueryData).toHaveBeenCalledWith(
       deckQueryKeys.detail("deck-1"),
       deck,
     );
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: deckQueryKeys.lists(),
+    });
+  });
+
+  it("removes a deleted deck from cache and invalidates the deck list", async () => {
+    mockDeleteDeck.mockResolvedValue(undefined);
+    const mutation = getDeleteDeckMutation();
+
+    await mutation.mutationFn("deck-1");
+    mutation.onSuccess(undefined, "deck-1");
+
+    expect(mockDeleteDeck).toHaveBeenCalledWith("deck-1");
+    expect(mockSetQueryData).toHaveBeenCalledWith(
+      deckQueryKeys.list(),
+      expect.any(Function),
+    );
+    const updateDeckList = mockSetQueryData.mock.calls[0]?.[1] as (
+      current: DecksResponse | undefined,
+    ) => DecksResponse | undefined;
+    const cachedDecks = {
+      items: [deck, { ...deck, id: "deck-2", title: "Keep me" }],
+    };
+
+    expect(updateDeckList(cachedDecks)).toEqual({
+      items: [{ ...deck, id: "deck-2", title: "Keep me" }],
+    });
+    expect(mockRemoveQueries).toHaveBeenCalledWith({
+      exact: true,
+      queryKey: deckQueryKeys.detail("deck-1"),
+    });
     expect(mockInvalidateQueries).toHaveBeenCalledWith({
       queryKey: deckQueryKeys.lists(),
     });
@@ -92,7 +130,7 @@ describe("deck mutation cache behavior", () => {
     const mutation = getAddDeckWordsMutation("deck-1");
 
     const response = await mutation.mutationFn(request);
-    mutation.onSuccess(response);
+    mutation.onSuccess(response, request);
 
     expect(mockAddDeckWords).toHaveBeenCalledWith("deck-1", request);
     expect(mockSetQueryData).toHaveBeenCalledWith(
@@ -113,12 +151,9 @@ describe("deck mutation cache behavior", () => {
     const mutation = getRemoveDeckWordMutation("deck-1");
 
     await mutation.mutationFn("deck-card-1");
-    mutation.onSuccess(undefined);
+    mutation.onSuccess(undefined, "deck-card-1");
 
-    expect(mockRemoveDeckWord).toHaveBeenCalledWith(
-      "deck-1",
-      "deck-card-1",
-    );
+    expect(mockRemoveDeckWord).toHaveBeenCalledWith("deck-1", "deck-card-1");
     expect(
       mockInvalidateQueries.mock.calls.map(([filters]) => filters),
     ).toEqual([
@@ -164,6 +199,12 @@ function getAddDeckWordsMutation(deckId: string) {
     DeckDetail,
     AddDeckWordsRequest
   >;
+}
+
+function getDeleteDeckMutation() {
+  const { result } = renderHook(() => useDeleteDeck());
+
+  return result.current as unknown as MutationOptions<void, string>;
 }
 
 function getRemoveDeckWordMutation(deckId: string) {

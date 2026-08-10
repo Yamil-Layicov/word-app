@@ -72,6 +72,24 @@ export class DecksService {
     return toDeckDetailResponse(deck);
   }
 
+  async deleteDeck(
+    currentUser: AuthenticatedUser,
+    deckId: string,
+  ): Promise<void> {
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+    const deleted = await this.decksRepository.deleteDeck({
+      userId: currentUser.id,
+      languagePairId: activeLanguagePairId,
+      deckId,
+    });
+
+    if (!deleted) {
+      throw new NotFoundException('Deck not found');
+    }
+  }
+
   async addWordsToDeck(
     currentUser: AuthenticatedUser,
     deckId: string,

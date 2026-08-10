@@ -5,6 +5,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   AudienceScope,
   CefrLevel,
+  PracticeMode,
+  ReviewRating,
+  ScheduledReviewInterval,
+  ScheduledReviewState,
   UserWordStatus,
   WordType,
 } from '@prisma/client';
@@ -387,6 +391,146 @@ describe('DecksController (e2e)', () => {
     ).resolves.not.toBeNull();
   });
 
+  it('deletes only the deck container and preserves shared learning data', async () => {
+    const deck = await createDeck('delete-container');
+    const deckWithWords = await addWords(deck.id, 'delete-container');
+    const word = deckWithWords.items[0];
+
+    if (!word) {
+      throw new Error('Expected a word in the deck being deleted');
+    }
+
+    const secondDeck = await createDeck('delete-container-shared');
+    await request(app.getHttpServer())
+      .post(`/decks/${secondDeck.id}/words`)
+      .set('Authorization', `Bearer ${ownerAccessToken}`)
+      .send({
+        words: [
+          {
+            sourceText: word.sourceText,
+            targetText: word.targetText,
+          },
+        ],
+      })
+      .expect(201);
+
+    const preservedUserWord = await prisma.userWord.update({
+      where: { id: word.userWord.id },
+      data: {
+        status: UserWordStatus.LEARNING,
+        masteryStep: 3,
+      },
+      select: {
+        id: true,
+        userId: true,
+        vocabularyItemId: true,
+      },
+    });
+    const schedule = await prisma.userWordSchedule.create({
+      data: {
+        userId: preservedUserWord.userId,
+        userWordId: preservedUserWord.id,
+        state: ScheduledReviewState.STARTED,
+        interval: ScheduledReviewInterval.ONE_DAY,
+        startedAt: new Date(),
+        dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    const reviewLog = await prisma.reviewLog.create({
+      data: {
+        userId: preservedUserWord.userId,
+        userWordId: preservedUserWord.id,
+        vocabularyItemId: preservedUserWord.vocabularyItemId,
+        rating: ReviewRating.GOOD,
+        isCorrect: true,
+      },
+    });
+    const practiceLog = await prisma.practiceLog.create({
+      data: {
+        userId: preservedUserWord.userId,
+        userWordId: preservedUserWord.id,
+        vocabularyItemId: preservedUserWord.vocabularyItemId,
+        practiceMode: PracticeMode.MATCHING,
+        isCorrect: true,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .delete(`/decks/${deck.id}`)
+      .set('Authorization', `Bearer ${ownerAccessToken}`)
+      .expect(204);
+
+    await request(app.getHttpServer())
+      .get(`/decks/${deck.id}`)
+      .set('Authorization', `Bearer ${ownerAccessToken}`)
+      .expect(404);
+    await request(app.getHttpServer())
+      .delete(`/decks/${deck.id}`)
+      .set('Authorization', `Bearer ${ownerAccessToken}`)
+      .expect(404);
+
+    const secondDeckResponse = await request(app.getHttpServer())
+      .get(`/decks/${secondDeck.id}`)
+      .set('Authorization', `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    const preservedDeck = expectDeckDetailBody(
+      secondDeckResponse.body as unknown,
+    );
+
+    expect(
+      preservedDeck.items.some((item) => item.userWord.id === word.userWord.id),
+    ).toBe(true);
+    await expect(
+      prisma.deckCard.count({ where: { deckId: deck.id } }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.userWord.findUnique({ where: { id: preservedUserWord.id } }),
+    ).resolves.toMatchObject({
+      id: preservedUserWord.id,
+      masteryStep: 3,
+    });
+    await expect(
+      prisma.vocabularyItem.findUnique({
+        where: { id: preservedUserWord.vocabularyItemId },
+      }),
+    ).resolves.not.toBeNull();
+    await expect(
+      prisma.userWordSchedule.findUnique({ where: { id: schedule.id } }),
+    ).resolves.toMatchObject({ state: ScheduledReviewState.STARTED });
+    await expect(
+      prisma.reviewLog.findUnique({ where: { id: reviewLog.id } }),
+    ).resolves.not.toBeNull();
+    await expect(
+      prisma.practiceLog.findUnique({ where: { id: practiceLog.id } }),
+    ).resolves.not.toBeNull();
+  });
+
+  it('allows deleting the default deck without promoting another deck', async () => {
+    const defaultResponse = await request(app.getHttpServer())
+      .post('/decks')
+      .set('Authorization', `Bearer ${ownerAccessToken}`)
+      .send({ title: `Default ${runId}`, isDefault: true })
+      .expect(201);
+    const defaultDeck = expectDeckDetailBody(defaultResponse.body as unknown);
+    const regularDeck = await createDeck('not-promoted');
+
+    await request(app.getHttpServer())
+      .delete(`/decks/${defaultDeck.id}`)
+      .set('Authorization', `Bearer ${ownerAccessToken}`)
+      .expect(204);
+
+    const listResponse = await request(app.getHttpServer())
+      .get('/decks')
+      .set('Authorization', `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    const decks = expectDeckListBody(listResponse.body as unknown);
+
+    expect(decks.find((deck) => deck.id === regularDeck.id)?.isDefault).toBe(
+      false,
+    );
+    expect(decks.some((deck) => deck.isDefault)).toBe(false);
+  });
+
   it('hides owner decks and mutations from another user', async () => {
     const deck = await createDeck('ownership');
     const deckWithWords = await addWords(deck.id, 'ownership');
@@ -407,6 +551,11 @@ describe('DecksController (e2e)', () => {
 
     await request(app.getHttpServer())
       .delete(`/decks/${deck.id}/words/${word?.deckCardId}`)
+      .set('Authorization', `Bearer ${otherAccessToken}`)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .delete(`/decks/${deck.id}`)
       .set('Authorization', `Bearer ${otherAccessToken}`)
       .expect(404);
 

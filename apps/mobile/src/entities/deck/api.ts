@@ -18,6 +18,10 @@ export function createDeck(input: CreateDeckRequest) {
   return authClient.post<DeckDetail>("/decks", input);
 }
 
+export function deleteDeck(id: string) {
+  return authClient.delete<void>(`/decks/${id}`);
+}
+
 export function addDeckWords(deckId: string, input: AddDeckWordsRequest) {
   return authClient.post<DeckDetail>(`/decks/${deckId}/words`, input);
 }

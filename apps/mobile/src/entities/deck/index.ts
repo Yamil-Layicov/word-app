@@ -1,6 +1,7 @@
 export {
   addDeckWords,
   createDeck,
+  deleteDeck,
   getDeck,
   listDecks,
   removeDeckWord,

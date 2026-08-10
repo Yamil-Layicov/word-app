@@ -4,6 +4,7 @@ import { authClient } from "@/auth";
 import {
   addDeckWords,
   createDeck,
+  deleteDeck,
   getDeck,
   listDecks,
   removeDeckWord,
@@ -59,6 +60,14 @@ describe("deck API", () => {
     expect(postMock).toHaveBeenCalledWith("/decks", input);
   });
 
+  it("deletes a deck without expecting a response body", async () => {
+    deleteMock.mockResolvedValue(undefined);
+
+    await expect(deleteDeck("deck-1")).resolves.toBeUndefined();
+
+    expect(deleteMock).toHaveBeenCalledWith("/decks/deck-1");
+  });
+
   it("adds multiple words to a deck with the complete request body", async () => {
     const input: AddDeckWordsRequest = {
       words: [
@@ -91,8 +100,6 @@ describe("deck API", () => {
       removeDeckWord("deck-1", "deck-card-1"),
     ).resolves.toBeUndefined();
 
-    expect(deleteMock).toHaveBeenCalledWith(
-      "/decks/deck-1/words/deck-card-1",
-    );
+    expect(deleteMock).toHaveBeenCalledWith("/decks/deck-1/words/deck-card-1");
   });
 });

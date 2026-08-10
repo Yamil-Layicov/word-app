@@ -12,10 +12,12 @@ const currentUser: AuthenticatedUser = {
 };
 
 describe('DecksService', () => {
+  let deleteDeckMock: jest.Mock;
   let removeDeckCardMock: jest.Mock;
   let service: DecksService;
 
   beforeEach(() => {
+    deleteDeckMock = jest.fn();
     removeDeckCardMock = jest.fn();
 
     const repository = {
@@ -35,10 +37,31 @@ describe('DecksService', () => {
           },
         ],
       }),
+      deleteDeck: deleteDeckMock,
       removeDeckCard: removeDeckCardMock,
     } as unknown as DecksRepository;
 
     service = new DecksService(repository);
+  });
+
+  it('deletes an owned learning deck in the active language pair', async () => {
+    deleteDeckMock.mockResolvedValue(true);
+
+    await service.deleteDeck(currentUser, 'deck-1');
+
+    expect(deleteDeckMock).toHaveBeenCalledWith({
+      userId: currentUser.id,
+      languagePairId: 'pair-1',
+      deckId: 'deck-1',
+    });
+  });
+
+  it('returns not found when the deck is outside the owner scope', async () => {
+    deleteDeckMock.mockResolvedValue(false);
+
+    await expect(
+      service.deleteDeck(currentUser, 'missing-deck'),
+    ).rejects.toThrow('Deck not found');
   });
 
   it('removes only the requested card from a deck owned by the user', async () => {

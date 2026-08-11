@@ -13,7 +13,10 @@ import {
   useScheduledReviewsQuery,
   type ScheduledReviewItem,
 } from "@/features/review-boxes";
-import { useUpdateVocabularyItem } from "@/features/vocabulary";
+import {
+  useDeleteVocabularyItemPermanently,
+  useUpdateVocabularyItem,
+} from "@/features/vocabulary";
 import { VocabularyListScreen } from "../VocabularyListScreen";
 
 jest.mock("expo-router", () => ({
@@ -39,6 +42,7 @@ jest.mock("@/features/review-boxes", () => ({
 }));
 
 jest.mock("@/features/vocabulary", () => ({
+  useDeleteVocabularyItemPermanently: jest.fn(),
   useUpdateVocabularyItem: jest.fn(),
 }));
 
@@ -48,6 +52,8 @@ const useInfiniteVocabularyItemsQueryMock =
 const useAuthFailureRedirectMock = useAuthFailureRedirect as jest.Mock;
 const useScheduleUserWordMock = useScheduleUserWord as jest.Mock;
 const useScheduledReviewsQueryMock = useScheduledReviewsQuery as jest.Mock;
+const useDeleteVocabularyItemPermanentlyMock =
+  useDeleteVocabularyItemPermanently as jest.Mock;
 const useUpdateVocabularyItemMock = useUpdateVocabularyItem as jest.Mock;
 
 const router = {
@@ -57,6 +63,8 @@ const router = {
 const fetchNextPage = jest.fn();
 const refetchVocabulary = jest.fn();
 const scheduleUserWord = jest.fn();
+const deleteVocabularyItemPermanently = jest.fn();
+const resetDeleteVocabularyItem = jest.fn();
 const updateVocabularyItem = jest.fn();
 
 const vocabularyItem = createVocabularyItem();
@@ -67,6 +75,7 @@ describe("VocabularyListScreen", () => {
     fetchNextPage.mockReset().mockResolvedValue(undefined);
     refetchVocabulary.mockReset().mockResolvedValue(undefined);
     scheduleUserWord.mockReset().mockResolvedValue(undefined);
+    deleteVocabularyItemPermanently.mockReset().mockResolvedValue(undefined);
     updateVocabularyItem.mockReset().mockResolvedValue(undefined);
 
     useRouterMock.mockReturnValue(router);
@@ -83,6 +92,12 @@ describe("VocabularyListScreen", () => {
     });
     useUpdateVocabularyItemMock.mockReturnValue(
       createMutation(updateVocabularyItem),
+    );
+    useDeleteVocabularyItemPermanentlyMock.mockReturnValue(
+      createMutation(
+        deleteVocabularyItemPermanently,
+        resetDeleteVocabularyItem,
+      ),
     );
   });
 
@@ -205,13 +220,42 @@ describe("VocabularyListScreen", () => {
       expect(screen.getByText("hello marked as mastered.")).toBeTruthy();
     });
   });
+
+  it("requires confirmation before permanently deleting a word", async () => {
+    render(<VocabularyListScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Open actions for hello" }),
+    );
+    fireEvent.press(screen.getByText("Delete permanently"));
+
+    expect(screen.getByText("Delete word permanently?")).toBeTruthy();
+    expect(
+      screen.getByText(
+        '"hello" will be removed from My Vocabulary, every deck and collection, review boxes, learning progress and history.',
+      ),
+    ).toBeTruthy();
+    expect(deleteVocabularyItemPermanently).not.toHaveBeenCalled();
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Delete permanently" }),
+    );
+
+    await waitFor(() => {
+      expect(deleteVocabularyItemPermanently).toHaveBeenCalledWith(
+        "vocabulary-item-1",
+      );
+      expect(screen.getByText("hello permanently deleted.")).toBeTruthy();
+    });
+  });
 });
 
-function createMutation(mutateAsync: jest.Mock) {
+function createMutation(mutateAsync: jest.Mock, reset = jest.fn()) {
   return {
     error: null,
     isPending: false,
     mutateAsync,
+    reset,
   };
 }
 

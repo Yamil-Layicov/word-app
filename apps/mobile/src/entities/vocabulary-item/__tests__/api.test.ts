@@ -4,6 +4,7 @@ import { authClient } from "@/auth";
 import {
   archiveVocabularyItem,
   createVocabularyItem,
+  deleteVocabularyItemPermanently,
   getVocabularyItem,
   listVocabularyItems,
   updateVocabularyItem,
@@ -111,5 +112,17 @@ describe("vocabulary item API", () => {
     await expect(archiveVocabularyItem("item-1")).resolves.toBeUndefined();
 
     expect(deleteMock).toHaveBeenCalledWith("/vocabulary/items/item-1");
+  });
+
+  it("permanently deletes one user-owned vocabulary item", async () => {
+    deleteMock.mockResolvedValue(undefined);
+
+    await expect(
+      deleteVocabularyItemPermanently("item-1"),
+    ).resolves.toBeUndefined();
+
+    expect(deleteMock).toHaveBeenCalledWith(
+      "/vocabulary/items/item-1/permanent",
+    );
   });
 });

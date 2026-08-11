@@ -4,8 +4,11 @@ import { renderHook } from "@testing-library/react-native";
 
 import { deckQueryKeys } from "@/entities/deck";
 import { masteredCollectionQueryKeys } from "@/entities/mastered-collection";
+import { practiceItemQueryKeys } from "@/entities/practice";
+import { reviewQueryKeys } from "@/entities/review";
 import {
   createVocabularyItem,
+  deleteVocabularyItemPermanently,
   updateVocabularyItem,
   vocabularyItemQueryKeys,
   type CreateVocabularyItemRequest,
@@ -15,6 +18,7 @@ import {
 import { scheduledReviewQueryKeys } from "@/features/review-boxes";
 import { queryClient } from "@/shared/lib/query-client";
 import { useCreateVocabularyItem } from "../hooks/useCreateVocabularyItem";
+import { useDeleteVocabularyItemPermanently } from "../hooks/useDeleteVocabularyItemPermanently";
 import { useUpdateVocabularyItem } from "../hooks/useUpdateVocabularyItem";
 
 jest.mock("@tanstack/react-query", () => ({
@@ -24,19 +28,25 @@ jest.mock("@tanstack/react-query", () => ({
 jest.mock("@/entities/vocabulary-item", () => ({
   ...jest.requireActual("@/entities/vocabulary-item/query-keys"),
   createVocabularyItem: jest.fn(),
+  deleteVocabularyItemPermanently: jest.fn(),
   updateVocabularyItem: jest.fn(),
 }));
 
 jest.mock("@/shared/lib/query-client", () => ({
   queryClient: {
     invalidateQueries: jest.fn(),
+    removeQueries: jest.fn(),
     setQueryData: jest.fn(),
   },
 }));
 
 const mockCreateVocabularyItem = jest.mocked(createVocabularyItem);
+const mockDeleteVocabularyItemPermanently = jest.mocked(
+  deleteVocabularyItemPermanently,
+);
 const mockUpdateVocabularyItem = jest.mocked(updateVocabularyItem);
 const mockInvalidateQueries = jest.mocked(queryClient.invalidateQueries);
+const mockRemoveQueries = jest.mocked(queryClient.removeQueries);
 const mockSetQueryData = jest.mocked(queryClient.setQueryData);
 
 type CreateMutationOptions = {
@@ -52,6 +62,11 @@ type UpdateInput = {
 type UpdateMutationOptions = {
   mutationFn: (input: UpdateInput) => Promise<VocabularyItem>;
   onSuccess: (item: VocabularyItem) => void;
+};
+
+type DeleteMutationOptions = {
+  mutationFn: (id: string) => Promise<void>;
+  onSuccess: (response: void, id: string) => void;
 };
 
 const item = createVocabularyItemResponse();
@@ -112,6 +127,34 @@ describe("vocabulary mutation cache behavior", () => {
     ]);
   });
 
+  it("clears every user projection after permanent deletion", async () => {
+    mockDeleteVocabularyItemPermanently.mockResolvedValue(undefined);
+    const mutation = getDeleteMutation();
+
+    await expect(
+      mutation.mutationFn("vocabulary-item-1"),
+    ).resolves.toBeUndefined();
+    mutation.onSuccess(undefined, "vocabulary-item-1");
+
+    expect(mockDeleteVocabularyItemPermanently).toHaveBeenCalledWith(
+      "vocabulary-item-1",
+    );
+    expect(mockRemoveQueries).toHaveBeenCalledWith({
+      exact: true,
+      queryKey: vocabularyItemQueryKeys.detail("vocabulary-item-1"),
+    });
+    expect(
+      mockInvalidateQueries.mock.calls.map(([filters]) => filters),
+    ).toEqual([
+      { queryKey: vocabularyItemQueryKeys.lists() },
+      { queryKey: masteredCollectionQueryKeys.all },
+      { queryKey: scheduledReviewQueryKeys.all },
+      { queryKey: deckQueryKeys.all },
+      { queryKey: reviewQueryKeys.all },
+      { queryKey: practiceItemQueryKeys.lists() },
+    ]);
+  });
+
   it("does not update caches when vocabulary creation fails", async () => {
     const request: CreateVocabularyItemRequest = {
       sourceText: "hello",
@@ -139,6 +182,14 @@ function getUpdateMutation(): UpdateMutationOptions {
   const { result } = renderHook(() => useUpdateVocabularyItem());
 
   return result.current as unknown as UpdateMutationOptions;
+}
+
+function getDeleteMutation(): DeleteMutationOptions {
+  const { result } = renderHook(() =>
+    useDeleteVocabularyItemPermanently(),
+  );
+
+  return result.current as unknown as DeleteMutationOptions;
 }
 
 function createVocabularyItemResponse(): VocabularyItem {

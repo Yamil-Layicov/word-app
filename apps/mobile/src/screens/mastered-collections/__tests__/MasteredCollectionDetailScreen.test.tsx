@@ -14,6 +14,7 @@ import {
   useRemoveMasteredCollectionWord,
 } from "@/features/mastered-collections";
 import { useScheduleUserWord } from "@/features/review-boxes";
+import { useDeleteVocabularyItemPermanently } from "@/features/vocabulary";
 import { MasteredCollectionDetailScreen } from "../MasteredCollectionDetailScreen";
 
 jest.mock("expo-router", () => ({
@@ -43,6 +44,10 @@ jest.mock("@/features/review-boxes", () => ({
   useScheduleUserWord: jest.fn(),
 }));
 
+jest.mock("@/features/vocabulary", () => ({
+  useDeleteVocabularyItemPermanently: jest.fn(),
+}));
+
 const useLocalSearchParamsMock = useLocalSearchParams as jest.Mock;
 const useRouterMock = useRouter as jest.Mock;
 const useMasteredCollectionQueryMock =
@@ -53,6 +58,8 @@ const useDeleteMasteredCollectionMock =
 const useRemoveMasteredCollectionWordMock =
   useRemoveMasteredCollectionWord as jest.Mock;
 const useScheduleUserWordMock = useScheduleUserWord as jest.Mock;
+const useDeleteVocabularyItemPermanentlyMock =
+  useDeleteVocabularyItemPermanently as jest.Mock;
 
 const router = {
   back: jest.fn(),
@@ -61,6 +68,8 @@ const router = {
 const deleteCollection = jest.fn();
 const removeCollectionWord = jest.fn();
 const scheduleUserWord = jest.fn();
+const deleteVocabularyItemPermanently = jest.fn();
+const resetDeleteVocabularyItem = jest.fn();
 const refetchCollection = jest.fn();
 
 const hello = createCollectionWord({
@@ -85,6 +94,7 @@ describe("MasteredCollectionDetailScreen", () => {
     deleteCollection.mockReset().mockResolvedValue(undefined);
     removeCollectionWord.mockReset().mockResolvedValue(undefined);
     scheduleUserWord.mockReset().mockResolvedValue(undefined);
+    deleteVocabularyItemPermanently.mockReset().mockResolvedValue(undefined);
 
     useLocalSearchParamsMock.mockReturnValue({ collectionId: "collection-1" });
     useRouterMock.mockReturnValue(router);
@@ -100,6 +110,12 @@ describe("MasteredCollectionDetailScreen", () => {
     );
     useScheduleUserWordMock.mockReturnValue(
       createMutation(scheduleUserWord),
+    );
+    useDeleteVocabularyItemPermanentlyMock.mockReturnValue(
+      createMutation(
+        deleteVocabularyItemPermanently,
+        resetDeleteVocabularyItem,
+      ),
     );
   });
 
@@ -182,6 +198,30 @@ describe("MasteredCollectionDetailScreen", () => {
     });
   });
 
+  it("can permanently delete a word from a collection without deleting the collection", async () => {
+    render(<MasteredCollectionDetailScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Open actions for hello" }),
+    );
+    fireEvent.press(screen.getByText("Delete permanently"));
+
+    expect(screen.getByText("Delete word permanently?")).toBeTruthy();
+    expect(deleteVocabularyItemPermanently).not.toHaveBeenCalled();
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Delete permanently" }),
+    );
+
+    await waitFor(() => {
+      expect(deleteVocabularyItemPermanently).toHaveBeenCalledWith(
+        "vocabulary-item-1",
+      );
+      expect(screen.getByText("hello permanently deleted.")).toBeTruthy();
+    });
+    expect(deleteCollection).not.toHaveBeenCalled();
+  });
+
   it("requires confirmation before deleting the collection", async () => {
     render(<MasteredCollectionDetailScreen />);
 
@@ -221,11 +261,12 @@ describe("MasteredCollectionDetailScreen", () => {
   });
 });
 
-function createMutation(mutateAsync: jest.Mock) {
+function createMutation(mutateAsync: jest.Mock, reset = jest.fn()) {
   return {
     error: null,
     isPending: false,
     mutateAsync,
+    reset,
   };
 }
 

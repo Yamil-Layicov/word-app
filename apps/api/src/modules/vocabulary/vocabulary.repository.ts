@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   AudienceScope,
+  DeckPurpose,
   ScheduledReviewState,
   UserWordStatus,
   WordType,
@@ -55,7 +56,10 @@ type UpdateUserVocabularyItemInput = {
   isFavorite?: boolean;
   status?: UserWordStatus;
   masteryStep?: number;
+  intervalDays?: number;
+  nextReviewAt?: Date | null;
   cancelActiveSchedulesAt?: Date;
+  removeFromMasteredCollections?: boolean;
 };
 
 type ArchiveUserVocabularyItemInput = {
@@ -339,6 +343,12 @@ export class VocabularyRepository {
           ...(input.masteryStep !== undefined
             ? { masteryStep: input.masteryStep }
             : {}),
+          ...(input.intervalDays !== undefined
+            ? { intervalDays: input.intervalDays }
+            : {}),
+          ...(input.nextReviewAt !== undefined
+            ? { nextReviewAt: input.nextReviewAt }
+            : {}),
         },
         select: userWordWithVocabularyItemSelect,
       });
@@ -355,6 +365,18 @@ export class VocabularyRepository {
           data: {
             state: ScheduledReviewState.CANCELLED,
             cancelledAt: input.cancelActiveSchedulesAt,
+          },
+        });
+      }
+
+      if (input.removeFromMasteredCollections) {
+        await tx.deckCard.deleteMany({
+          where: {
+            userWordId: userWord.id,
+            deck: {
+              userId: input.userId,
+              purpose: DeckPurpose.MASTERED_COLLECTION,
+            },
           },
         });
       }

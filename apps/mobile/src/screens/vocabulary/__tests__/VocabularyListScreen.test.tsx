@@ -221,6 +221,41 @@ describe("VocabularyListScreen", () => {
     });
   });
 
+  it("moves a mastered word back to learning only after confirmation", async () => {
+    const masteredItem: VocabularyItem = {
+      ...vocabularyItem,
+      userWord: {
+        ...vocabularyItem.userWord,
+        status: "MASTERED",
+        masteryStep: 5,
+      },
+    };
+    useInfiniteVocabularyItemsQueryMock.mockReturnValue(
+      createVocabularyQuery([masteredItem]),
+    );
+    render(<VocabularyListScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Open actions for hello" }),
+    );
+    fireEvent.press(screen.getByText("Move back to learning"));
+
+    expect(screen.getByText("Move back to learning?")).toBeTruthy();
+    expect(updateVocabularyItem).not.toHaveBeenCalled();
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Move to learning" }),
+    );
+
+    await waitFor(() => {
+      expect(updateVocabularyItem).toHaveBeenCalledWith({
+        id: "vocabulary-item-1",
+        data: { status: "LEARNING" },
+      });
+      expect(screen.getByText("hello moved back to learning.")).toBeTruthy();
+    });
+  });
+
   it("requires confirmation before permanently deleting a word", async () => {
     render(<VocabularyListScreen />);
 

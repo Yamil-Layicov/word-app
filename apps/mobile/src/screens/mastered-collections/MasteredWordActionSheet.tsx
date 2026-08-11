@@ -8,6 +8,7 @@ type MasteredWordActionSheetProps = {
   onAddToCollection?: () => void;
   onClose: () => void;
   onDeletePermanently: () => void;
+  onMoveToLearning: () => void;
   onRemoveFromCollection?: () => void;
   onReviewLater: () => void;
   title: string;
@@ -19,6 +20,7 @@ export function MasteredWordActionSheet({
   onAddToCollection,
   onClose,
   onDeletePermanently,
+  onMoveToLearning,
   onRemoveFromCollection,
   onReviewLater,
   title,
@@ -52,6 +54,12 @@ export function MasteredWordActionSheet({
             icon="time-outline"
             label="Review later"
             onPress={onReviewLater}
+          />
+          <ActionRow
+            disabled={disabled}
+            icon="school-outline"
+            label="Move back to learning"
+            onPress={onMoveToLearning}
           />
           {onRemoveFromCollection ? (
             <ActionRow

@@ -124,6 +124,8 @@ describe("vocabulary mutation cache behavior", () => {
       { queryKey: masteredCollectionQueryKeys.all },
       { queryKey: scheduledReviewQueryKeys.all },
       { queryKey: deckQueryKeys.all },
+      { queryKey: reviewQueryKeys.all },
+      { queryKey: practiceItemQueryKeys.lists() },
     ]);
   });
 

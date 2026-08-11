@@ -29,6 +29,7 @@ import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 
 import { PermanentDeleteWordModal } from "./PermanentDeleteWordModal";
+import { MoveWordToLearningModal } from "./MoveWordToLearningModal";
 import { VocabularyWordRow } from "./VocabularyWordRow";
 
 export function VocabularyListScreen() {
@@ -37,6 +38,8 @@ export function VocabularyListScreen() {
   const [deleteCandidate, setDeleteCandidate] = useState<VocabularyItem | null>(
     null,
   );
+  const [moveToLearningCandidate, setMoveToLearningCandidate] =
+    useState<VocabularyItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const updateVocabularyItemMutation = useUpdateVocabularyItem();
   const deleteVocabularyItemMutation =
@@ -67,6 +70,12 @@ export function VocabularyListScreen() {
       ? isApiError(deleteVocabularyItemMutation.error)
         ? deleteVocabularyItemMutation.error.message
         : "Could not permanently delete this word."
+      : null;
+  const moveToLearningErrorMessage =
+    updateVocabularyItemMutation.error && !hasUnauthorizedError
+      ? isApiError(updateVocabularyItemMutation.error)
+        ? updateVocabularyItemMutation.error.message
+        : "Could not move this word back to learning."
       : null;
 
   const handleScheduleWord = async (item: VocabularyItem, interval: ReviewInterval) => {
@@ -124,6 +133,29 @@ export function VocabularyListScreen() {
     }
   };
 
+  const handleMoveToLearning = async () => {
+    if (
+      !moveToLearningCandidate ||
+      updateVocabularyItemMutation.isPending
+    ) {
+      return;
+    }
+
+    const word = moveToLearningCandidate;
+    setNotice(null);
+
+    try {
+      await updateVocabularyItemMutation.mutateAsync({
+        id: word.id,
+        data: { status: "LEARNING" },
+      });
+      setMoveToLearningCandidate(null);
+      setNotice(`${word.sourceText} moved back to learning.`);
+    } catch {
+      // Keep the confirmation open so the user can retry or cancel.
+    }
+  };
+
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
       <View style={styles.topBar}>
@@ -169,6 +201,7 @@ export function VocabularyListScreen() {
           showScheduledOverlay
           onMenuPress={() => {
             deleteVocabularyItemMutation.reset();
+            updateVocabularyItemMutation.reset();
             setSelectedItem(item);
           }}
           onPress={() =>
@@ -209,7 +242,28 @@ export function VocabularyListScreen() {
         onMarkKnown={(item) => {
           void handleMarkKnown(item);
         }}
+        onMoveToLearning={(item) => {
+          updateVocabularyItemMutation.reset();
+          setSelectedItem(null);
+          setMoveToLearningCandidate(item);
+        }}
         onSchedule={handleScheduleWord}
+      />
+
+      <MoveWordToLearningModal
+        errorMessage={moveToLearningErrorMessage}
+        loading={updateVocabularyItemMutation.isPending}
+        sourceText={moveToLearningCandidate?.sourceText ?? "Word"}
+        visible={Boolean(moveToLearningCandidate)}
+        onCancel={() => {
+          if (!updateVocabularyItemMutation.isPending) {
+            updateVocabularyItemMutation.reset();
+            setMoveToLearningCandidate(null);
+          }
+        }}
+        onConfirm={() => {
+          void handleMoveToLearning();
+        }}
       />
 
       <PermanentDeleteWordModal
@@ -237,6 +291,7 @@ type WordActionSheetProps = {
   onClose: () => void;
   onDeletePermanently: (item: VocabularyItem) => void;
   onMarkKnown: (item: VocabularyItem) => void;
+  onMoveToLearning: (item: VocabularyItem) => void;
   onSchedule: (item: VocabularyItem, interval: ReviewInterval) => void;
 };
 
@@ -246,6 +301,7 @@ function WordActionSheet({
   onClose,
   onDeletePermanently,
   onMarkKnown,
+  onMoveToLearning,
   onSchedule,
 }: WordActionSheetProps) {
   return (
@@ -270,12 +326,21 @@ function WordActionSheet({
                   onPress={() => onSchedule(item, interval)}
                 />
               ))}
-              <ActionButton
-                disabled={isUpdating || item.userWord.status === "MASTERED"}
-                icon="checkmark-circle-outline"
-                label={item.userWord.status === "MASTERED" ? "Already mastered" : "I know this word"}
-                onPress={() => onMarkKnown(item)}
-              />
+              {item.userWord.status === "MASTERED" ? (
+                <ActionButton
+                  disabled={isUpdating}
+                  icon="school-outline"
+                  label="Move back to learning"
+                  onPress={() => onMoveToLearning(item)}
+                />
+              ) : (
+                <ActionButton
+                  disabled={isUpdating}
+                  icon="checkmark-circle-outline"
+                  label="I know this word"
+                  onPress={() => onMarkKnown(item)}
+                />
+              )}
               <ActionButton
                 danger
                 disabled={isUpdating}

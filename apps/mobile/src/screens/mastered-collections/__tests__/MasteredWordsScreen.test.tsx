@@ -17,7 +17,10 @@ import {
   useCreateMasteredCollection,
 } from "@/features/mastered-collections";
 import { useScheduleUserWord } from "@/features/review-boxes";
-import { useDeleteVocabularyItemPermanently } from "@/features/vocabulary";
+import {
+  useDeleteVocabularyItemPermanently,
+  useUpdateVocabularyItem,
+} from "@/features/vocabulary";
 import { MasteredWordsScreen } from "../MasteredWordsScreen";
 
 jest.mock("expo-router", () => ({
@@ -52,6 +55,7 @@ jest.mock("@/features/review-boxes", () => ({
 
 jest.mock("@/features/vocabulary", () => ({
   useDeleteVocabularyItemPermanently: jest.fn(),
+  useUpdateVocabularyItem: jest.fn(),
 }));
 
 const useRouterMock = useRouter as jest.Mock;
@@ -67,6 +71,7 @@ const useCreateMasteredCollectionMock =
 const useScheduleUserWordMock = useScheduleUserWord as jest.Mock;
 const useDeleteVocabularyItemPermanentlyMock =
   useDeleteVocabularyItemPermanently as jest.Mock;
+const useUpdateVocabularyItemMock = useUpdateVocabularyItem as jest.Mock;
 
 const router = {
   back: jest.fn(),
@@ -76,7 +81,9 @@ const addCollectionWords = jest.fn();
 const createCollection = jest.fn();
 const scheduleUserWord = jest.fn();
 const deleteVocabularyItemPermanently = jest.fn();
+const moveVocabularyItemToLearning = jest.fn();
 const resetDeleteVocabularyItem = jest.fn();
+const resetMoveVocabularyItemToLearning = jest.fn();
 const resetAddCollectionWords = jest.fn();
 const resetCreateCollection = jest.fn();
 const refetchCollections = jest.fn();
@@ -108,6 +115,7 @@ describe("MasteredWordsScreen", () => {
     createCollection.mockReset().mockResolvedValue(travelCollection);
     scheduleUserWord.mockReset().mockResolvedValue(undefined);
     deleteVocabularyItemPermanently.mockReset().mockResolvedValue(undefined);
+    moveVocabularyItemToLearning.mockReset().mockResolvedValue(undefined);
 
     useRouterMock.mockReturnValue(router);
     useAuthFailureRedirectMock.mockReturnValue(false);
@@ -130,6 +138,12 @@ describe("MasteredWordsScreen", () => {
       createMutation(
         deleteVocabularyItemPermanently,
         resetDeleteVocabularyItem,
+      ),
+    );
+    useUpdateVocabularyItemMock.mockReturnValue(
+      createMutation(
+        moveVocabularyItemToLearning,
+        resetMoveVocabularyItemToLearning,
       ),
     );
   });
@@ -253,6 +267,35 @@ describe("MasteredWordsScreen", () => {
         "vocabulary-item-1",
       );
       expect(screen.getByText("hello permanently deleted.")).toBeTruthy();
+    });
+  });
+
+  it("moves a mastered word back to learning only after confirmation", async () => {
+    render(<MasteredWordsScreen />);
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Open actions for hello" }),
+    );
+    fireEvent.press(screen.getByText("Move back to learning"));
+
+    expect(screen.getByText("Move back to learning?")).toBeTruthy();
+    expect(
+      screen.getByText(
+        '"hello" will leave Mastered Words and mastered collections. Its mastery progress and official learning interval will restart.',
+      ),
+    ).toBeTruthy();
+    expect(moveVocabularyItemToLearning).not.toHaveBeenCalled();
+
+    fireEvent.press(
+      screen.getByRole("button", { name: "Move to learning" }),
+    );
+
+    await waitFor(() => {
+      expect(moveVocabularyItemToLearning).toHaveBeenCalledWith({
+        id: "vocabulary-item-1",
+        data: { status: "LEARNING" },
+      });
+      expect(screen.getByText("hello moved back to learning.")).toBeTruthy();
     });
   });
 

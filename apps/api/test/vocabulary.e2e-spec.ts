@@ -558,6 +558,135 @@ describe('VocabularyController (e2e)', () => {
     expect(completedSchedule?.cancelledAt).toBeNull();
   });
 
+  it('should move a mastered word back to learning atomically', async () => {
+    const createdItem = await createVocabularyItem('move-to-learning');
+    const lastReviewedAt = new Date('2026-08-01T08:00:00.000Z');
+    const nextReviewAt = new Date('2026-09-01T08:00:00.000Z');
+    const learningDeck = await prisma.deck.create({
+      data: {
+        userId,
+        languagePairId,
+        title: `Move learning deck ${runId}`,
+        purpose: DeckPurpose.LEARNING,
+      },
+    });
+    const masteredCollection = await prisma.deck.create({
+      data: {
+        userId,
+        languagePairId,
+        title: `Move mastered collection ${runId}`,
+        purpose: DeckPurpose.MASTERED_COLLECTION,
+      },
+    });
+
+    await prisma.userWord.update({
+      where: { id: createdItem.userWord.id },
+      data: {
+        status: UserWordStatus.MASTERED,
+        easeFactor: 2.1,
+        intervalDays: 30,
+        masteryStep: 5,
+        reviewCount: 7,
+        correctCount: 6,
+        wrongCount: 1,
+        lastReviewedAt,
+        nextReviewAt,
+      },
+    });
+    await prisma.deckCard.createMany({
+      data: [learningDeck.id, masteredCollection.id].map((deckId) => ({
+        deckId,
+        userWordId: createdItem.userWord.id,
+      })),
+    });
+    const schedule = await prisma.userWordSchedule.create({
+      data: {
+        userId,
+        userWordId: createdItem.userWord.id,
+        interval: ScheduledReviewInterval.ONE_DAY,
+        state: ScheduledReviewState.QUEUED,
+      },
+    });
+    await prisma.reviewLog.create({
+      data: {
+        userId,
+        userWordId: createdItem.userWord.id,
+        vocabularyItemId: createdItem.id,
+        rating: ReviewRating.GOOD,
+        isCorrect: true,
+      },
+    });
+    await prisma.practiceLog.create({
+      data: {
+        userId,
+        userWordId: createdItem.userWord.id,
+        vocabularyItemId: createdItem.id,
+        practiceMode: PracticeMode.FLASHCARD,
+        isCorrect: true,
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .patch(`/vocabulary/items/${createdItem.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ status: UserWordStatus.LEARNING })
+      .expect(200);
+
+    const body = expectVocabularyItemBody(response.body as unknown);
+
+    expect(body.userWord.status).toBe(UserWordStatus.LEARNING);
+    expect(body.userWord.masteryStep).toBe(0);
+
+    const userWord = await prisma.userWord.findUniqueOrThrow({
+      where: { id: createdItem.userWord.id },
+    });
+
+    expect(userWord.status).toBe(UserWordStatus.LEARNING);
+    expect(userWord.masteryStep).toBe(0);
+    expect(userWord.intervalDays).toBe(0);
+    expect(userWord.nextReviewAt).toBeNull();
+    expect(userWord.easeFactor).toBe(2.1);
+    expect(userWord.reviewCount).toBe(7);
+    expect(userWord.correctCount).toBe(6);
+    expect(userWord.wrongCount).toBe(1);
+    expect(userWord.lastReviewedAt).toEqual(lastReviewedAt);
+
+    await expect(
+      prisma.deckCard.count({
+        where: {
+          userWordId: createdItem.userWord.id,
+          deckId: learningDeck.id,
+        },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.deckCard.count({
+        where: {
+          userWordId: createdItem.userWord.id,
+          deckId: masteredCollection.id,
+        },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.userWordSchedule.findUnique({ where: { id: schedule.id } }),
+    ).resolves.toMatchObject({ state: ScheduledReviewState.QUEUED });
+    await expect(
+      prisma.reviewLog.count({
+        where: { userWordId: createdItem.userWord.id },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.practiceLog.count({
+        where: { userWordId: createdItem.userWord.id },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.deck.count({
+        where: { id: { in: [learningDeck.id, masteredCollection.id] } },
+      }),
+    ).resolves.toBe(2);
+  });
+
   /**
    * Empty PATCH body reject olunmalıdır.
    *

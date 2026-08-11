@@ -21,18 +21,27 @@ import {
   useScheduleUserWord,
   type ScheduledReviewInterval,
 } from "@/features/review-boxes";
-import { useDeleteVocabularyItemPermanently } from "@/features/vocabulary";
+import {
+  useDeleteVocabularyItemPermanently,
+  useUpdateVocabularyItem,
+} from "@/features/vocabulary";
 import { isApiError } from "@/shared/api/http-error";
 import { ScreenContainer } from "@/shared/layout/ScreenContainer";
 import { colors, radii, spacing, typography } from "@/shared/theme";
 import { Button } from "@/shared/ui";
 import { PermanentDeleteWordModal } from "@/screens/vocabulary/PermanentDeleteWordModal";
+import { MoveWordToLearningModal } from "@/screens/vocabulary/MoveWordToLearningModal";
 import { VocabularyWordRow } from "@/screens/vocabulary/VocabularyWordRow";
 import { ReviewModePicker } from "@/screens/review-boxes/ReviewModePicker";
 import { ScheduledWordActionSheet } from "@/screens/review-boxes/ScheduledWordActionSheet";
 import { MasteredWordActionSheet } from "./MasteredWordActionSheet";
 
-type ActionMode = "actions" | "delete" | "schedule" | null;
+type ActionMode =
+  | "actions"
+  | "delete"
+  | "moveToLearning"
+  | "schedule"
+  | null;
 type ConfirmMode = "collection" | "word" | null;
 
 type Feedback = {
@@ -51,6 +60,7 @@ export function MasteredCollectionDetailScreen() {
   const deleteCollectionMutation = useDeleteMasteredCollection();
   const scheduleMutation = useScheduleUserWord();
   const deleteWordMutation = useDeleteVocabularyItemPermanently();
+  const moveToLearningMutation = useUpdateVocabularyItem();
   const [selectedWord, setSelectedWord] =
     useState<MasteredCollectionWord | null>(null);
   const [actionMode, setActionMode] = useState<ActionMode>(null);
@@ -62,19 +72,27 @@ export function MasteredCollectionDetailScreen() {
     removeWordMutation.isPending ||
     deleteCollectionMutation.isPending ||
     scheduleMutation.isPending ||
-    deleteWordMutation.isPending;
+    deleteWordMutation.isPending ||
+    moveToLearningMutation.isPending;
   const hasUnauthorizedError = useAuthFailureRedirect(
     collectionQuery.error ??
       removeWordMutation.error ??
       deleteCollectionMutation.error ??
       scheduleMutation.error ??
-      deleteWordMutation.error,
+      deleteWordMutation.error ??
+      moveToLearningMutation.error,
   );
   const deleteWordErrorMessage =
     deleteWordMutation.error && !hasUnauthorizedError
       ? isApiError(deleteWordMutation.error)
         ? deleteWordMutation.error.message
         : "Could not permanently delete this word."
+      : null;
+  const moveToLearningErrorMessage =
+    moveToLearningMutation.error && !hasUnauthorizedError
+      ? isApiError(moveToLearningMutation.error)
+        ? moveToLearningMutation.error.message
+        : "Could not move this word back to learning."
       : null;
 
   const scheduleSelectedWord = async (interval: ScheduledReviewInterval) => {
@@ -187,6 +205,30 @@ export function MasteredCollectionDetailScreen() {
     }
   };
 
+  const moveSelectedWordToLearning = async () => {
+    if (!selectedWord || moveToLearningMutation.isPending) {
+      return;
+    }
+
+    const word = selectedWord;
+    setFeedback(null);
+
+    try {
+      await moveToLearningMutation.mutateAsync({
+        id: word.id,
+        data: { status: "LEARNING" },
+      });
+      setSelectedWord(null);
+      setActionMode(null);
+      setFeedback({
+        message: `${word.sourceText} moved back to learning.`,
+        tone: "success",
+      });
+    } catch {
+      // The confirmation stays open and renders the mutation error.
+    }
+  };
+
   const startPractice = (mode: PracticeSessionMode) => {
     if (!collection) {
       return;
@@ -292,6 +334,7 @@ export function MasteredCollectionDetailScreen() {
           item={item}
           onMenuPress={() => {
             deleteWordMutation.reset();
+            moveToLearningMutation.reset();
             setSelectedWord(item);
             setActionMode("actions");
           }}
@@ -313,11 +356,29 @@ export function MasteredCollectionDetailScreen() {
           setActionMode(null);
         }}
         onDeletePermanently={() => setActionMode("delete")}
+        onMoveToLearning={() => setActionMode("moveToLearning")}
         onRemoveFromCollection={() => {
           setActionMode(null);
           setConfirmMode("word");
         }}
         onReviewLater={() => setActionMode("schedule")}
+      />
+
+      <MoveWordToLearningModal
+        errorMessage={moveToLearningErrorMessage}
+        loading={moveToLearningMutation.isPending}
+        sourceText={selectedWord?.sourceText ?? "Word"}
+        visible={actionMode === "moveToLearning"}
+        onCancel={() => {
+          if (!moveToLearningMutation.isPending) {
+            moveToLearningMutation.reset();
+            setSelectedWord(null);
+            setActionMode(null);
+          }
+        }}
+        onConfirm={() => {
+          void moveSelectedWordToLearning();
+        }}
       />
 
       <PermanentDeleteWordModal

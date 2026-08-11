@@ -1,6 +1,6 @@
 import { ConfirmActionModal } from "@/shared/ui";
 
-type PermanentDeleteWordModalProps = {
+type MoveWordToLearningModalProps = {
   errorMessage?: string | null;
   loading: boolean;
   onCancel: () => void;
@@ -9,24 +9,23 @@ type PermanentDeleteWordModalProps = {
   visible: boolean;
 };
 
-export function PermanentDeleteWordModal({
+export function MoveWordToLearningModal({
   errorMessage,
   loading,
   onCancel,
   onConfirm,
   sourceText,
   visible,
-}: PermanentDeleteWordModalProps) {
+}: MoveWordToLearningModalProps) {
   return (
     <ConfirmActionModal
-      confirmTitle="Delete permanently"
+      confirmTitle="Move to learning"
       errorMessage={errorMessage}
       loading={loading}
-      loadingTitle="Deleting..."
-      message={`"${sourceText}" will be removed from My Vocabulary, every deck and collection, review boxes, learning progress and history.`}
-      supportingMessage="This action cannot be undone."
-      title="Delete word permanently?"
-      tone="danger"
+      loadingTitle="Moving..."
+      message={`"${sourceText}" will leave Mastered Words and mastered collections. Its mastery progress and official learning interval will restart.`}
+      supportingMessage="Review boxes and review/practice history will stay."
+      title="Move back to learning?"
       visible={visible}
       onCancel={onCancel}
       onConfirm={onConfirm}

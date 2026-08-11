@@ -2,6 +2,8 @@ import { useMutation } from "@tanstack/react-query";
 
 import { deckQueryKeys } from "@/entities/deck";
 import { masteredCollectionQueryKeys } from "@/entities/mastered-collection";
+import { practiceItemQueryKeys } from "@/entities/practice";
+import { reviewQueryKeys } from "@/entities/review";
 import {
   updateVocabularyItem,
   vocabularyItemQueryKeys,
@@ -32,6 +34,12 @@ export function useUpdateVocabularyItem() {
       });
       void queryClient.invalidateQueries({
         queryKey: deckQueryKeys.all,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: reviewQueryKeys.all,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: practiceItemQueryKeys.lists(),
       });
     },
   });

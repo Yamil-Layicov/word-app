@@ -22,6 +22,7 @@ import type {
 } from './vocabulary.types';
 
 const DEFAULT_LIST_LIMIT = 20;
+const INITIAL_MASTERY_STEP = 0;
 const MAX_MASTERY_STEP = 5;
 
 @Injectable()
@@ -145,6 +146,8 @@ export class VocabularyService {
     );
     const isMarkingAsMastered =
       updateUserVocabularyItemDto.status === UserWordStatus.MASTERED;
+    const isMovingToLearning =
+      updateUserVocabularyItemDto.status === UserWordStatus.LEARNING;
 
     const result = await this.vocabularyRepository.updateUserVocabularyItem({
       userId: currentUser.id,
@@ -160,6 +163,14 @@ export class VocabularyService {
         ? {
             masteryStep: MAX_MASTERY_STEP,
             cancelActiveSchedulesAt: this.clockService.now(),
+          }
+        : {}),
+      ...(isMovingToLearning
+        ? {
+            masteryStep: INITIAL_MASTERY_STEP,
+            intervalDays: 0,
+            nextReviewAt: null,
+            removeFromMasteredCollections: true,
           }
         : {}),
     });

@@ -152,6 +152,13 @@ describe("VocabularyListScreen", () => {
     expect(screen.getByText("No words added yet.")).toBeTruthy();
   });
 
+  it("renders as the Study tab root without a back action", () => {
+    render(<VocabularyListScreen />);
+
+    expect(screen.getByText("My Vocabulary")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Go back" })).toBeNull();
+  });
+
   it("renders scheduled word state and opens the word detail", () => {
     useScheduledReviewsQueryMock.mockReturnValue({
       data: { items: [createScheduledReviewItem()] },

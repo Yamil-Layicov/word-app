@@ -159,16 +159,7 @@ export function VocabularyListScreen() {
   return (
     <ScreenContainer backgroundColor={colors.backgroundWarm} contentStyle={styles.content}>
       <View style={styles.topBar}>
-        <Pressable
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-          style={styles.iconButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back-outline" size={24} color={colors.textMuted} />
-        </Pressable>
         <Text numberOfLines={1} style={styles.title}>My Vocabulary</Text>
-        <View style={styles.topSpacer} />
       </View>
 
       {notice ? (
@@ -445,8 +436,6 @@ const styles = StyleSheet.create({
     minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
   },
@@ -456,17 +445,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 28,
     fontWeight: typography.weights.semibold,
-  },
-  topSpacer: {
-    width: 42,
-    height: 42,
-  },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: radii.pill,
-    alignItems: "center",
-    justifyContent: "center",
   },
   noticeBox: {
     borderRadius: radii.md,

@@ -2,17 +2,13 @@
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Alert } from "react-native";
 
 import {
   useVocabularyItemQuery,
   type VocabularyItem,
 } from "@/entities/vocabulary-item";
 import { useAuthFailureRedirect } from "@/features/auth";
-import {
-  useArchiveVocabularyItem,
-  useUpdateVocabularyItem,
-} from "@/features/vocabulary";
+import { useReplaceVocabularyItemContent } from "@/features/vocabulary";
 import { ApiError } from "@/shared/api/http-error";
 import { VocabularyDetailScreen } from "../VocabularyDetailScreen";
 
@@ -34,177 +30,163 @@ jest.mock("@/features/auth", () => ({
 }));
 
 jest.mock("@/features/vocabulary", () => ({
-  useArchiveVocabularyItem: jest.fn(),
-  useUpdateVocabularyItem: jest.fn(),
+  useReplaceVocabularyItemContent: jest.fn(),
 }));
 
-const useLocalSearchParamsMock = useLocalSearchParams as jest.Mock;
-const useRouterMock = useRouter as jest.Mock;
-const useVocabularyItemQueryMock = useVocabularyItemQuery as jest.Mock;
-const useAuthFailureRedirectMock = useAuthFailureRedirect as jest.Mock;
-const useArchiveVocabularyItemMock = useArchiveVocabularyItem as jest.Mock;
-const useUpdateVocabularyItemMock = useUpdateVocabularyItem as jest.Mock;
+const useLocalSearchParamsMock = jest.mocked(useLocalSearchParams);
+const useRouterMock = jest.mocked(useRouter);
+const useVocabularyItemQueryMock = jest.mocked(useVocabularyItemQuery);
+const useAuthFailureRedirectMock = jest.mocked(useAuthFailureRedirect);
+const useReplaceVocabularyItemContentMock = jest.mocked(
+  useReplaceVocabularyItemContent,
+);
 
 const router = {
   back: jest.fn(),
-  replace: jest.fn(),
 };
-const archiveVocabularyItem = jest.fn();
 const refetchVocabularyItem = jest.fn();
-const updateVocabularyItem = jest.fn();
-const alertSpy = jest.spyOn(Alert, "alert");
-
+const replaceVocabularyItemContent = jest.fn();
 const vocabularyItem = createVocabularyItem();
 
 describe("VocabularyDetailScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    alertSpy.mockReset();
-    archiveVocabularyItem.mockReset().mockResolvedValue(undefined);
     refetchVocabularyItem.mockReset().mockResolvedValue(undefined);
-    updateVocabularyItem.mockReset().mockResolvedValue(undefined);
+    replaceVocabularyItemContent
+      .mockReset()
+      .mockResolvedValue(vocabularyItem);
 
     useLocalSearchParamsMock.mockReturnValue({ id: "vocabulary-item-1" });
-    useRouterMock.mockReturnValue(router);
+    useRouterMock.mockReturnValue(router as never);
     useAuthFailureRedirectMock.mockReturnValue(false);
     useVocabularyItemQueryMock.mockReturnValue(
-      createVocabularyItemQuery(vocabularyItem),
+      createVocabularyItemQuery(vocabularyItem) as never,
     );
-    useArchiveVocabularyItemMock.mockReturnValue(
-      createMutation(archiveVocabularyItem),
-    );
-    useUpdateVocabularyItemMock.mockReturnValue(
-      createMutation(updateVocabularyItem),
+    useReplaceVocabularyItemContentMock.mockReturnValue(
+      createMutation(replaceVocabularyItemContent) as never,
     );
   });
 
-  afterAll(() => {
-    alertSpy.mockRestore();
-  });
-
-  it("loads the vocabulary item selected by the route", () => {
+  it("loads the selected word into an editable form", () => {
     render(<VocabularyDetailScreen />);
 
     expect(useVocabularyItemQueryMock).toHaveBeenCalledWith(
       "vocabulary-item-1",
     );
-    expect(screen.getByText("hello")).toBeTruthy();
-    expect(screen.getByText("salam")).toBeTruthy();
-    expect(screen.getByText("noun - A1 - learning")).toBeTruthy();
-    expect(screen.getByText("A greeting")).toBeTruthy();
-    expect(screen.getByText("Common greeting")).toBeTruthy();
-    expect(screen.getByText("2 / 1")).toBeTruthy();
-    expect(screen.getByText("Not scheduled")).toBeTruthy();
-    expect(screen.getByText("Hello, how are you?")).toBeTruthy();
-    expect(screen.getByText("Salam, necesen?")).toBeTruthy();
+    expect(screen.getByDisplayValue("hello")).toBeTruthy();
+    expect(screen.getByDisplayValue("salam")).toBeTruthy();
+    expect(screen.getByDisplayValue("Hello, how are you?")).toBeTruthy();
+    expect(screen.getByDisplayValue("Salam, necesen?")).toBeTruthy();
   });
 
-  it("shows the loading state while the detail request is pending", () => {
-    useVocabularyItemQueryMock.mockReturnValue(
-      createVocabularyItemQuery(undefined, { isLoading: true }),
-    );
-
+  it("adds and removes example editors", () => {
     render(<VocabularyDetailScreen />);
 
-    expect(screen.getByText("Loading word...")).toBeTruthy();
-    expect(screen.queryByText("hello")).toBeNull();
+    fireEvent.press(screen.getByRole("button", { name: "Add example" }));
+
+    expect(screen.getByText("Example 2")).toBeTruthy();
+    fireEvent.press(
+      screen.getByRole("button", { name: "Remove example 2" }),
+    );
+    expect(screen.queryByText("Example 2")).toBeNull();
   });
 
-  it("retries a failed detail request", () => {
+  it("validates a partially completed example before saving", () => {
+    render(<VocabularyDetailScreen />);
+
+    fireEvent.press(screen.getByRole("button", { name: "Add example" }));
+    fireEvent.changeText(
+      screen.getAllByPlaceholderText("I read a book every evening.")[1],
+      "A new source sentence.",
+    );
+    fireEvent.press(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.getByText("Translation is required.")).toBeTruthy();
+    expect(replaceVocabularyItemContent).not.toHaveBeenCalled();
+  });
+
+  it("saves the word and every complete example in one request", async () => {
+    render(<VocabularyDetailScreen />);
+
+    fireEvent.changeText(screen.getByDisplayValue("hello"), "  welcome  ");
+    fireEvent.changeText(screen.getByDisplayValue("salam"), "  xoş gəldin  ");
+    fireEvent.press(screen.getByRole("button", { name: "Add example" }));
+    fireEvent.changeText(
+      screen.getAllByPlaceholderText("I read a book every evening.")[1],
+      "Welcome to Baku.",
+    );
+    fireEvent.changeText(
+      screen.getAllByPlaceholderText("Mən hər axşam kitab oxuyuram.")[1],
+      "Bakıya xoş gəldin.",
+    );
+    fireEvent.press(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(replaceVocabularyItemContent).toHaveBeenCalledWith({
+        id: "vocabulary-item-1",
+        data: {
+          sourceText: "welcome",
+          targetText: "xoş gəldin",
+          examples: [
+            {
+              sourceSentence: "Hello, how are you?",
+              targetSentence: "Salam, necesen?",
+            },
+            {
+              sourceSentence: "Welcome to Baku.",
+              targetSentence: "Bakıya xoş gəldin.",
+            },
+          ],
+        },
+      });
+      expect(screen.getByText("Changes saved.")).toBeTruthy();
+    });
+  });
+
+  it("shows the API message when content cannot be edited", async () => {
+    replaceVocabularyItemContent.mockRejectedValueOnce(
+      new ApiError({
+        status: 409,
+        message: "Shared vocabulary content cannot be edited",
+      }),
+    );
+    render(<VocabularyDetailScreen />);
+
+    fireEvent.press(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(
+      await screen.findByText("Shared vocabulary content cannot be edited"),
+    ).toBeTruthy();
+  });
+
+  it("shows loading and retry states without rendering the form", () => {
     useVocabularyItemQueryMock.mockReturnValue(
       createVocabularyItemQuery(undefined, {
         error: new Error("Network unavailable"),
         isError: true,
-      }),
+      }) as never,
     );
 
     render(<VocabularyDetailScreen />);
 
     expect(screen.getByText("Could not load this word.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     fireEvent.press(screen.getByRole("button", { name: "Try again" }));
     expect(refetchVocabularyItem).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves unauthorized detail errors to the auth redirect flow", () => {
+  it("leaves unauthorized errors to the auth redirect flow", () => {
     useVocabularyItemQueryMock.mockReturnValue(
       createVocabularyItemQuery(undefined, {
         error: new Error("Unauthorized"),
         isError: true,
-      }),
+      }) as never,
     );
     useAuthFailureRedirectMock.mockReturnValue(true);
 
     render(<VocabularyDetailScreen />);
 
     expect(screen.queryByText("Could not load this word.")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-  });
-
-  it("adds the word to favorites with one update command", async () => {
-    render(<VocabularyDetailScreen />);
-
-    fireEvent.press(screen.getByRole("button", { name: "Add favorite" }));
-
-    await waitFor(() => {
-      expect(updateVocabularyItem).toHaveBeenCalledWith({
-        id: "vocabulary-item-1",
-        data: { isFavorite: true },
-      });
-      expect(screen.getByText("Added to favorites.")).toBeTruthy();
-    });
-  });
-
-  it("updates the learning status selected by the user", async () => {
-    render(<VocabularyDetailScreen />);
-
-    fireEvent.press(screen.getByRole("button", { name: "Reviewing" }));
-
-    await waitFor(() => {
-      expect(updateVocabularyItem).toHaveBeenCalledWith({
-        id: "vocabulary-item-1",
-        data: { status: "REVIEWING" },
-      });
-      expect(screen.getByText("Status changed to Reviewing.")).toBeTruthy();
-    });
-  });
-
-  it("archives only after the destructive action is confirmed", async () => {
-    render(<VocabularyDetailScreen />);
-
-    fireEvent.press(screen.getByRole("button", { name: "Archive word" }));
-
-    expect(alertSpy).toHaveBeenCalledWith(
-      "Archive word",
-      "This word will be removed from your active vocabulary list.",
-      expect.any(Array),
-    );
-    expect(archiveVocabularyItem).not.toHaveBeenCalled();
-
-    const buttons = alertSpy.mock.calls[0]?.[2];
-    const archiveButton = buttons?.find((button) => button.text === "Archive");
-    archiveButton?.onPress?.();
-
-    await waitFor(() => {
-      expect(archiveVocabularyItem).toHaveBeenCalledWith(
-        "vocabulary-item-1",
-      );
-      expect(router.replace).toHaveBeenCalledWith("/vocabulary");
-    });
-  });
-
-  it("keeps the detail open and shows an API archive error", async () => {
-    archiveVocabularyItem.mockRejectedValueOnce(
-      new ApiError({ status: 409, message: "Word cannot be archived." }),
-    );
-    render(<VocabularyDetailScreen />);
-
-    fireEvent.press(screen.getByRole("button", { name: "Archive word" }));
-    const buttons = alertSpy.mock.calls[0]?.[2];
-    const archiveButton = buttons?.find((button) => button.text === "Archive");
-    archiveButton?.onPress?.();
-
-    expect(await screen.findByText("Word cannot be archived.")).toBeTruthy();
-    expect(router.replace).not.toHaveBeenCalled();
   });
 });
 

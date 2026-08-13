@@ -271,15 +271,23 @@ function CreateDeckModal({ error, loading, onClose, onCreate, visible }: CreateD
 
     setLocalError(null);
 
-    await onCreate({
-      title: nextTitle,
-      ...(nextDescription ? { description: nextDescription } : {}),
-      isDefault,
-    });
+    try {
+      await onCreate({
+        title: nextTitle,
+        ...(nextDescription ? { description: nextDescription } : {}),
+        isDefault,
+      });
 
-    setTitle("");
-    setDescription("");
-    setIsDefault(false);
+      setTitle("");
+      setDescription("");
+      setIsDefault(false);
+    } catch (error) {
+      setLocalError(
+        isApiError(error)
+          ? error.message
+          : "Could not create this deck. Try again.",
+      );
+    }
   };
 
   const errorText = localError ?? (isApiError(error) ? error.message : null);

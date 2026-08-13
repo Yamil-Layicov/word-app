@@ -21,6 +21,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
+import { AuthTokenService } from '../src/modules/auth/auth-token.service';
 import {
   expectAuthResponseBody,
   expectBooleanField,
@@ -196,6 +197,7 @@ function expectMeLanguagePairsBody(
 describe('MeController (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let authTokenService: AuthTokenService;
 
   let countryCode: string;
   let inactiveCountryCode: string;
@@ -215,6 +217,7 @@ describe('MeController (e2e)', () => {
 
   const runId = `${Date.now()}`;
   const email = `me-e2e-${runId}@example.com`;
+  const legacyEmail = `me-e2e-legacy-${runId}@example.com`;
   const password = 'password123';
 
   beforeAll(async () => {
@@ -239,6 +242,7 @@ describe('MeController (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    authTokenService = app.get(AuthTokenService);
 
     /**
      * Profile update üçün active və inactive country yaradırıq.
@@ -398,7 +402,9 @@ describe('MeController (e2e)', () => {
      */
     await prisma.user.deleteMany({
       where: {
-        email,
+        email: {
+          in: [email, legacyEmail],
+        },
       },
     });
 
@@ -590,5 +596,53 @@ describe('MeController (e2e)', () => {
 
     expect(body.profile?.activeLanguagePairId).toBe(thirdLanguagePairId);
     expect(body.activeLanguagePair?.id).toBe(thirdLanguagePairId);
+  });
+
+  it('should recover a legacy account without a profile while completing language setup', async () => {
+    const legacyUser = await prisma.user.create({
+      data: {
+        email: legacyEmail,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const legacyAccessToken = await authTokenService.generateAccessToken({
+      sub: legacyUser.id,
+      email: legacyUser.email,
+      role: legacyUser.role,
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/me/language-pairs')
+      .set('Authorization', `Bearer ${legacyAccessToken}`)
+      .send({ languagePairId: firstLanguagePairId })
+      .expect(201);
+    const [addedPair] = expectMeLanguagePairsBody(response.body as unknown);
+
+    expect(addedPair?.languagePairId).toBe(firstLanguagePairId);
+    expect(addedPair?.isActive).toBe(true);
+
+    await expect(
+      prisma.userProfile.findUnique({
+        where: { userId: legacyUser.id },
+        select: { activeLanguagePairId: true },
+      }),
+    ).resolves.toEqual({ activeLanguagePairId: firstLanguagePairId });
+
+    await prisma.userProfile.delete({
+      where: { userId: legacyUser.id },
+    });
+
+    const activateResponse = await request(app.getHttpServer())
+      .patch('/me/active-language-pair')
+      .set('Authorization', `Bearer ${legacyAccessToken}`)
+      .send({ languagePairId: firstLanguagePairId })
+      .expect(200);
+    const activatedProfile = expectMeProfileBody(
+      activateResponse.body as unknown,
+    );
+
+    expect(activatedProfile.profile?.activeLanguagePairId).toBe(
+      firstLanguagePairId,
+    );
   });
 });

@@ -66,14 +66,24 @@ export class GoogleAuthService {
       await this.googleAuthRepository.findUserByProviderSubject(claims.subject);
 
     if (linkedUser) {
-      return this.authenticateUser(linkedUser, context);
+      return this.continueAuthentication(
+        linkedUser,
+        claims,
+        googleAuthDto.languagePairId,
+        context,
+      );
     }
 
     const emailUser =
       await this.googleAuthRepository.findUserByEmailForAutoLink(claims.email);
 
     if (emailUser) {
-      return this.autoLinkAndAuthenticate(emailUser, claims, context);
+      return this.autoLinkAndContinue(
+        emailUser,
+        claims,
+        googleAuthDto.languagePairId,
+        context,
+      );
     }
 
     if (!googleAuthDto.languagePairId) {
@@ -155,7 +165,7 @@ export class GoogleAuthService {
     claims: GoogleIdentityClaims,
     languagePairId: string,
     context: AuthRequestContext,
-  ): Promise<GoogleAuthAuthenticatedResponse> {
+  ): Promise<GoogleAuthResponse> {
     const result = await this.googleAuthRepository.createGoogleUser({
       email: claims.email,
       displayName: claims.displayName,
@@ -171,7 +181,12 @@ export class GoogleAuthService {
         );
 
       if (linkedUser) {
-        return this.authenticateUser(linkedUser, context);
+        return this.continueAuthentication(
+          linkedUser,
+          claims,
+          languagePairId,
+          context,
+        );
       }
 
       const emailUser =
@@ -180,20 +195,31 @@ export class GoogleAuthService {
         );
 
       if (emailUser) {
-        return this.autoLinkAndAuthenticate(emailUser, claims, context);
+        return this.autoLinkAndContinue(
+          emailUser,
+          claims,
+          languagePairId,
+          context,
+        );
       }
 
       throw new ConflictException('Could not complete Google Sign-In');
     }
 
-    return this.authenticateUser(result.user, context);
+    return this.continueAuthentication(
+      result.user,
+      claims,
+      languagePairId,
+      context,
+    );
   }
 
-  private async autoLinkAndAuthenticate(
+  private async autoLinkAndContinue(
     user: AuthUserResponseModel & { emailVerifiedAt: Date | null },
     claims: GoogleIdentityClaims,
+    languagePairId: string | undefined,
     context: AuthRequestContext,
-  ): Promise<GoogleAuthAuthenticatedResponse> {
+  ): Promise<GoogleAuthResponse> {
     if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenException('Account is not active');
     }
@@ -227,7 +253,37 @@ export class GoogleAuthService {
       );
     }
 
-    return this.authenticateUser(user, context);
+    return this.continueAuthentication(user, claims, languagePairId, context);
+  }
+
+  private async continueAuthentication(
+    user: AuthUserResponseModel,
+    claims: GoogleIdentityClaims,
+    languagePairId: string | undefined,
+    context: AuthRequestContext,
+  ): Promise<GoogleAuthResponse> {
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException('Account is not active');
+    }
+
+    if (user.profile?.activeLanguagePairId) {
+      return this.authenticateUser(user, context);
+    }
+
+    if (!languagePairId) {
+      return this.toOnboardingRequiredResponse(claims);
+    }
+
+    await this.assertActiveLanguagePair(languagePairId);
+
+    const completedUser =
+      await this.googleAuthRepository.completeGoogleOnboarding({
+        userId: user.id,
+        languagePairId,
+        displayName: claims.displayName,
+      });
+
+    return this.authenticateUser(completedUser, context);
   }
 
   private async authenticateUser(
@@ -255,6 +311,19 @@ export class GoogleAuthService {
     if (!languagePair) {
       throw new BadRequestException('Invalid language pair');
     }
+  }
+
+  private toOnboardingRequiredResponse(
+    claims: GoogleIdentityClaims,
+  ): GoogleAuthResponse {
+    return {
+      status: GOOGLE_AUTH_STATUS.onboardingRequired,
+      profile: {
+        email: claims.email,
+        displayName: claims.displayName,
+        pictureUrl: claims.pictureUrl,
+      },
+    };
   }
 
   private googleLinkConflict(code: string, message: string): ConflictException {

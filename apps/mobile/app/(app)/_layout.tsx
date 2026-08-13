@@ -8,6 +8,10 @@ import { colors } from "@/shared/theme";
 export default function AppLayout() {
   const { status } = useAuthSession();
 
+  if (status === "onboarding-required") {
+    return <Redirect href="/language-pair" />;
+  }
+
   if (status !== "authenticated") {
     return <Redirect href="/login" />;
   }

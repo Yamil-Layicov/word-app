@@ -16,6 +16,7 @@ import {
   getRegisterDraft,
   saveGoogleAuthDraft,
   saveRegisterDraft,
+  useAuthSession,
   useGoogleAuth,
   useRegister,
   useStartSession,
@@ -24,6 +25,8 @@ import {
 } from "@/features/auth";
 import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { useLanguagePairsQuery, type LanguagePair } from "@/entities/lookups";
+import { useMeLanguagePairsQuery } from "@/entities/user-language-pair";
+import { useAddLanguagePair, useSetActiveLanguagePair } from "@/features/me";
 import { ApiError } from "@/shared/api/http-error";
 import { LanguagePairSelectionScreen } from "../LanguagePairSelectionScreen";
 
@@ -40,14 +43,24 @@ jest.mock("@/entities/lookups", () => ({
   useLanguagePairsQuery: jest.fn(),
 }));
 
+jest.mock("@/entities/user-language-pair", () => ({
+  useMeLanguagePairsQuery: jest.fn(),
+}));
+
 jest.mock("@/features/auth", () => ({
   ...jest.requireActual("@/features/auth/auth-route-notice"),
   ...jest.requireActual("@/features/auth/register-draft"),
   ...jest.requireActual("@/features/auth/google-auth-draft"),
   ...jest.requireActual("@/features/auth/model"),
+  useAuthSession: jest.fn(),
   useGoogleAuth: jest.fn(),
   useRegister: jest.fn(),
   useStartSession: jest.fn(),
+}));
+
+jest.mock("@/features/me", () => ({
+  useAddLanguagePair: jest.fn(),
+  useSetActiveLanguagePair: jest.fn(),
 }));
 
 jest.mock("@/features/push-notifications", () => ({
@@ -56,9 +69,13 @@ jest.mock("@/features/push-notifications", () => ({
 
 const useRouterMock = useRouter as jest.Mock;
 const useLanguagePairsQueryMock = useLanguagePairsQuery as jest.Mock;
+const useMeLanguagePairsQueryMock = useMeLanguagePairsQuery as jest.Mock;
+const useAuthSessionMock = useAuthSession as jest.Mock;
 const useRegisterMock = useRegister as jest.Mock;
 const useGoogleAuthMock = useGoogleAuth as jest.Mock;
 const useStartSessionMock = useStartSession as jest.Mock;
+const useAddLanguagePairMock = useAddLanguagePair as jest.Mock;
+const useSetActiveLanguagePairMock = useSetActiveLanguagePair as jest.Mock;
 const consumePendingDestinationMock =
   consumePendingNotificationDestination as jest.Mock;
 
@@ -68,7 +85,12 @@ const router = {
 const register = jest.fn();
 const googleAuth = jest.fn();
 const startSession = jest.fn();
+const completeOnboarding = jest.fn();
+const endSession = jest.fn();
+const addLanguagePair = jest.fn();
+const setActiveLanguagePair = jest.fn();
 const refetch = jest.fn();
+const refetchMeLanguagePairs = jest.fn();
 
 const languagePair: LanguagePair = {
   id: "pair-1",
@@ -99,7 +121,16 @@ const googleAuthResponse: GoogleAuthAuthenticatedResponse = {
   accessToken: "access-token",
   refreshToken: "refresh-token",
   status: "AUTHENTICATED",
-  user: registerResponse,
+  user: {
+    ...registerResponse,
+    profile: {
+      id: "profile-1",
+      displayName: "Google User",
+      countryCode: null,
+      interfaceLanguage: "en",
+      activeLanguagePairId: "pair-1",
+    },
+  },
 };
 
 describe("LanguagePairSelectionScreen", () => {
@@ -107,8 +138,13 @@ describe("LanguagePairSelectionScreen", () => {
     jest.clearAllMocks();
     register.mockReset();
     googleAuth.mockReset();
-    startSession.mockReset();
+    startSession.mockReset().mockResolvedValue("authenticated");
+    completeOnboarding.mockReset().mockResolvedValue(undefined);
+    endSession.mockReset().mockResolvedValue(undefined);
+    addLanguagePair.mockReset().mockResolvedValue([]);
+    setActiveLanguagePair.mockReset().mockResolvedValue(undefined);
     refetch.mockReset();
+    refetchMeLanguagePairs.mockReset();
     clearRegisterDraft();
     clearGoogleAuthDraft();
     useRouterMock.mockReturnValue(router);
@@ -120,7 +156,27 @@ describe("LanguagePairSelectionScreen", () => {
       mutateAsync: googleAuth,
       isPending: false,
     });
+    useAuthSessionMock.mockReturnValue({
+      completeOnboarding,
+      endSession,
+      status: "unauthenticated",
+      user: null,
+    });
     useStartSessionMock.mockReturnValue(startSession);
+    useMeLanguagePairsQueryMock.mockReturnValue({
+      data: [],
+      isError: false,
+      isLoading: false,
+      refetch: refetchMeLanguagePairs,
+    });
+    useAddLanguagePairMock.mockReturnValue({
+      mutateAsync: addLanguagePair,
+      isPending: false,
+    });
+    useSetActiveLanguagePairMock.mockReturnValue({
+      mutateAsync: setActiveLanguagePair,
+      isPending: false,
+    });
     consumePendingDestinationMock.mockReturnValue(null);
     useLanguagePairsQueryMock.mockReturnValue({
       data: [languagePair],
@@ -251,7 +307,6 @@ describe("LanguagePairSelectionScreen", () => {
       },
     });
     googleAuth.mockResolvedValue(googleAuthResponse);
-    startSession.mockResolvedValue(undefined);
     render(<LanguagePairSelectionScreen />);
 
     selectLanguagePair();
@@ -267,6 +322,59 @@ describe("LanguagePairSelectionScreen", () => {
     });
     expect(getGoogleAuthDraft()).toBeNull();
     expect(register).not.toHaveBeenCalled();
+  });
+
+  it("adds the first pair before completing an authenticated legacy session", async () => {
+    useAuthSessionMock.mockReturnValue({
+      completeOnboarding,
+      endSession,
+      status: "onboarding-required",
+      user: {
+        ...registerResponse,
+        profile: null,
+      },
+    });
+    render(<LanguagePairSelectionScreen />);
+
+    selectLanguagePair();
+    fireEvent.press(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(addLanguagePair).toHaveBeenCalledWith({
+        languagePairId: "pair-1",
+      });
+      expect(completeOnboarding).toHaveBeenCalledTimes(1);
+      expect(router.replace).toHaveBeenCalledWith("/(app)");
+    });
+    expect(setActiveLanguagePair).not.toHaveBeenCalled();
+  });
+
+  it("activates an existing pair before completing an authenticated legacy session", async () => {
+    useAuthSessionMock.mockReturnValue({
+      completeOnboarding,
+      endSession,
+      status: "onboarding-required",
+      user: registerResponse,
+    });
+    useMeLanguagePairsQueryMock.mockReturnValue({
+      data: [{ languagePairId: "pair-1" }],
+      isError: false,
+      isLoading: false,
+      refetch: refetchMeLanguagePairs,
+    });
+    render(<LanguagePairSelectionScreen />);
+
+    selectLanguagePair();
+    fireEvent.press(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(setActiveLanguagePair).toHaveBeenCalledWith({
+        languagePairId: "pair-1",
+      });
+      expect(completeOnboarding).toHaveBeenCalledTimes(1);
+      expect(router.replace).toHaveBeenCalledWith("/(app)");
+    });
+    expect(addLanguagePair).not.toHaveBeenCalled();
   });
 });
 

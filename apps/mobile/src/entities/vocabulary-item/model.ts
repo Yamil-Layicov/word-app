@@ -84,3 +84,9 @@ export type UpdateVocabularyItemRequest = {
   isFavorite?: boolean;
   status?: UserWordStatus;
 };
+
+export type ReplaceVocabularyItemContentRequest = {
+  sourceText: string;
+  targetText: string;
+  examples: CreateVocabularyExampleRequest[];
+};

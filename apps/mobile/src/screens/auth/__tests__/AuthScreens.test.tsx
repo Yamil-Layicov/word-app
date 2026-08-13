@@ -104,7 +104,7 @@ describe("LoginScreen", () => {
     jest.clearAllMocks();
     login.mockReset();
     googleAuth.mockReset();
-    startSession.mockReset();
+    startSession.mockReset().mockResolvedValue("authenticated");
     useRouterMock.mockReturnValue(router);
     useLocalSearchParamsMock.mockReturnValue({});
     useLoginMock.mockReturnValue({
@@ -151,6 +151,30 @@ describe("LoginScreen", () => {
       expect(startSession).toHaveBeenCalledWith(authResponse);
       expect(router.replace).toHaveBeenCalledWith("/(app)");
     });
+  });
+
+  it("opens mandatory onboarding when the signed-in profile has no active language pair", async () => {
+    login.mockResolvedValue({
+      ...authResponse,
+      user: {
+        ...authResponse.user,
+        profile: null,
+      },
+    });
+    startSession.mockResolvedValue("onboarding-required");
+    render(<LoginScreen />);
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText("Email address"),
+      "user@example.com",
+    );
+    fireEvent.changeText(screen.getByPlaceholderText("Password"), "password");
+    fireEvent.press(screen.getByRole("button", { name: "Log in" }));
+
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith("/language-pair");
+    });
+    expect(consumePendingDestinationMock).not.toHaveBeenCalled();
   });
 
   it("shows the account-created notice passed by onboarding", () => {
@@ -385,7 +409,7 @@ describe("RegisterScreen", () => {
     jest.clearAllMocks();
     login.mockReset();
     googleAuth.mockReset();
-    startSession.mockReset();
+    startSession.mockReset().mockResolvedValue("authenticated");
     useRouterMock.mockReturnValue(router);
   });
 

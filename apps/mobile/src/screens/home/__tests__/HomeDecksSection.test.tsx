@@ -11,6 +11,7 @@ import { useRouter } from "expo-router";
 import { useDecksQuery, type DeckSummary } from "@/entities/deck";
 import { useAuthFailureRedirect } from "@/features/auth";
 import { useCreateDeck, useDeleteDeck } from "@/features/decks";
+import { ApiError } from "@/shared/api/http-error";
 import { HomeDecksSection } from "../HomeDecksSection";
 
 jest.mock("expo-router", () => ({
@@ -171,13 +172,35 @@ describe("HomeDecksSection", () => {
     });
   });
 
+  it("keeps the create dialog open and renders API validation errors", async () => {
+    createDeck.mockRejectedValueOnce(
+      new ApiError({
+        status: 400,
+        message: "Active language pair is not selected",
+      }),
+    );
+    render(<HomeDecksSection />);
+
+    fireEvent.press(screen.getByRole("button", { name: "Create deck" }));
+    fireEvent.changeText(screen.getByPlaceholderText("Deck name"), "Travel");
+    fireEvent.press(screen.getByRole("button", { name: "Create" }));
+
+    expect(
+      await screen.findByText("Active language pair is not selected"),
+    ).toBeTruthy();
+    expect(screen.getByPlaceholderText("Deck name")).toBeTruthy();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
   it("confirms and deletes the deck selected from the game picker", async () => {
     render(<HomeDecksSection />);
 
     fireEvent.press(screen.getByRole("button", { name: "Open game picker" }));
     fireEvent.press(screen.getByRole("button", { name: "Delete deck" }));
 
-    expect(screen.getByText('Delete "Travel words"?')).toBeTruthy();
+    const confirmationTitle = screen.getByText('Delete "Travel words"?');
+
+    expect(confirmationTitle).toBeTruthy();
     expect(
       screen.getByText(
         "The deck and its organization will be removed. Its 3 words, learning progress, scheduled reviews and history will remain in My Vocabulary.",
@@ -188,7 +211,7 @@ describe("HomeDecksSection", () => {
 
     await waitFor(() => {
       expect(deleteDeck).toHaveBeenCalledWith("deck-1");
-      expect(screen.queryByText('Delete "Travel words"?')).toBeNull();
+      expect(confirmationTitle).not.toBeOnTheScreen();
     });
   });
 

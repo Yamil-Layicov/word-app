@@ -21,14 +21,16 @@ import {
 import { syncCurrentDevicePushToken } from "@/features/push-notifications";
 import { isApiError } from "@/shared/api/http-error";
 import { queryClient } from "@/shared/lib/query-client";
-import { logoutSession, refreshSession } from "./api";
+import { getCurrentUser, logoutSession, refreshSession } from "./api";
 import { clearGoogleSignInSession } from "./google-sign-in/google-sign-in-client";
-import type { AuthTokensResponse } from "./model";
+import type { AuthTokensResponse, AuthUser } from "./model";
 import { authQueryKeys } from "./query-keys";
+
+export type SignedInSessionStatus = "authenticated" | "onboarding-required";
 
 export type AuthSessionStatus =
   | "restoring"
-  | "authenticated"
+  | SignedInSessionStatus
   | "unauthenticated"
   | "restore-error";
 
@@ -37,8 +39,10 @@ type EndSessionOptions = {
 };
 
 type AuthSessionContextValue = {
+  completeOnboarding: () => Promise<void>;
+  user: AuthUser | null;
   status: AuthSessionStatus;
-  startSession: (response: AuthTokensResponse) => Promise<void>;
+  startSession: (response: AuthTokensResponse) => Promise<SignedInSessionStatus>;
   endSession: (options?: EndSessionOptions) => Promise<void>;
   retryRestore: () => void;
 };
@@ -49,6 +53,7 @@ let restorePromise: Promise<AuthTokensResponse | null> | null = null;
 
 export function AuthSessionProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<AuthSessionStatus>("restoring");
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const sessionRevision = useRef(0);
 
@@ -56,6 +61,7 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     sessionRevision.current += 1;
     clearAccessToken();
     queryClient.clear();
+    setUser(null);
     setStatus("unauthenticated");
 
     await clearStoredRefreshToken().catch((error: unknown) => {
@@ -80,6 +86,28 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     }
 
     beginAuthenticatedSession(response);
+    const nextStatus = getSignedInSessionStatus(response.user);
+
+    setUser(response.user);
+    setStatus(nextStatus);
+
+    return nextStatus;
+  }, []);
+
+  const completeOnboarding = useCallback(async () => {
+    const revision = sessionRevision.current;
+    const currentUser = await getCurrentUser();
+
+    if (revision !== sessionRevision.current) {
+      throw new Error("The auth session changed while onboarding was completing.");
+    }
+
+    if (getSignedInSessionStatus(currentUser) !== "authenticated") {
+      throw new Error("Required onboarding is not complete.");
+    }
+
+    queryClient.setQueryData(authQueryKeys.me(), currentUser);
+    setUser(currentUser);
     setStatus("authenticated");
   }, []);
 
@@ -139,11 +167,13 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     }
 
     applyRefreshedSession(response);
-    setStatus("authenticated");
+    setUser(response.user);
+    setStatus(getSignedInSessionStatus(response.user));
   }, [invalidateSession]);
 
   const retryRestore = useCallback(() => {
     setStatus("restoring");
+    setUser(null);
     setRestoreAttempt((current) => current + 1);
   }, []);
 
@@ -166,12 +196,14 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
         }
 
         if (!response) {
+          setUser(null);
           setStatus("unauthenticated");
           return;
         }
 
         beginAuthenticatedSession(response);
-        setStatus("authenticated");
+        setUser(response.user);
+        setStatus(getSignedInSessionStatus(response.user));
       })
       .catch((error: unknown) => {
         if (!active) {
@@ -180,6 +212,7 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
 
         clearAccessToken();
         queryClient.clear();
+        setUser(null);
         logSessionWarning("Stored session could not be restored", error);
         setStatus("restore-error");
       });
@@ -190,8 +223,8 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
   }, [restoreAttempt]);
 
   const value = useMemo(
-    () => ({ status, startSession, endSession, retryRestore }),
-    [endSession, retryRestore, startSession, status],
+    () => ({ completeOnboarding, user, status, startSession, endSession, retryRestore }),
+    [completeOnboarding, endSession, retryRestore, startSession, status, user],
   );
 
   return <AuthSessionContext.Provider value={value}>{children}</AuthSessionContext.Provider>;
@@ -266,4 +299,10 @@ async function revokeServerSession(refreshToken: string): Promise<void> {
   await logoutSession({ refreshToken }).catch((error: unknown) => {
     logSessionWarning("Superseded server session could not be revoked", error);
   });
+}
+
+function getSignedInSessionStatus(user: AuthUser): SignedInSessionStatus {
+  return user.profile?.activeLanguagePairId
+    ? "authenticated"
+    : "onboarding-required";
 }

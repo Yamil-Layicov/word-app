@@ -19,6 +19,7 @@ export {
 } from "./auth-route-notice";
 export {
   AuthSessionProvider,
+  type SignedInSessionStatus,
   type AuthSessionStatus,
   useAuthSession,
 } from "./AuthSessionProvider";

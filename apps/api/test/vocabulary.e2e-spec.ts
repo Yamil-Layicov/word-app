@@ -470,6 +470,84 @@ describe('VocabularyController (e2e)', () => {
     expect(body.userWord.vocabularyItemId).toBe(createdItem.id);
   });
 
+  it('should replace editable private vocabulary content atomically', async () => {
+    const createdItem = await createVocabularyItem('replace-content');
+
+    const response = await request(app.getHttpServer())
+      .put(`/vocabulary/items/${createdItem.id}/content`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        sourceText: `  edited   source ${runId}  `,
+        targetText: `  edited   target ${runId}  `,
+        examples: [
+          {
+            sourceSentence: ' First edited example. ',
+            targetSentence: ' Birinci redaktə nümunəsi. ',
+          },
+          {
+            sourceSentence: 'Second edited example.',
+            targetSentence: 'İkinci redaktə nümunəsi.',
+          },
+        ],
+      })
+      .expect(200);
+
+    const body = expectVocabularyItemBody(response.body as unknown);
+
+    expect(body.id).toBe(createdItem.id);
+    expect(body.userWord.id).toBe(createdItem.userWord.id);
+    expect(body.sourceText).toBe(`edited source ${runId}`);
+    expect(body.targetText).toBe(`edited target ${runId}`);
+    expect(body.examples).toHaveLength(2);
+    expect(body.examples.map((example) => example.sourceSentence)).toEqual([
+      'First edited example.',
+      'Second edited example.',
+    ]);
+
+    const storedExamples = await prisma.vocabularyExample.findMany({
+      where: { vocabularyItemId: createdItem.id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    expect(storedExamples).toHaveLength(2);
+  });
+
+  it('should reject content replacement for vocabulary shared by another user', async () => {
+    const createdItem = await createVocabularyItem('shared-content');
+    const secondEmail = `vocabulary-shared-${runId}@example.com`;
+    const secondUser = await prisma.user.create({
+      data: {
+        email: secondEmail,
+        emailVerifiedAt: new Date(),
+        userWords: {
+          create: {
+            vocabularyItemId: createdItem.id,
+          },
+        },
+      },
+    });
+
+    try {
+      await request(app.getHttpServer())
+        .put(`/vocabulary/items/${createdItem.id}/content`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          sourceText: 'unsafe shared edit',
+          targetText: 'təhlükəli ortaq dəyişiklik',
+          examples: [],
+        })
+        .expect(409);
+
+      const storedItem = await prisma.vocabularyItem.findUniqueOrThrow({
+        where: { id: createdItem.id },
+      });
+
+      expect(storedItem.sourceText).toBe(createdItem.sourceText);
+    } finally {
+      await prisma.user.delete({ where: { id: secondUser.id } });
+    }
+  });
+
   /**
    * PATCH yalnız user-specific field-ləri update etməlidir.
    * MASTERED keçidi masteryStep-i tamamlamalı və aktiv manual review-ları

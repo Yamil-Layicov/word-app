@@ -62,6 +62,22 @@ type UpdateUserVocabularyItemInput = {
   removeFromMasteredCollections?: boolean;
 };
 
+type ReplaceVocabularyItemContentInput = {
+  userId: string;
+  vocabularyItemId: string;
+  languagePairId: string;
+  sourceText: string;
+  targetText: string;
+  sourceNormalized: string;
+  targetNormalized: string;
+  examples: CreateVocabularyExampleInput[];
+};
+
+export type ReplaceVocabularyItemContentResult =
+  | { status: 'NOT_FOUND' }
+  | { status: 'NOT_EDITABLE' }
+  | { status: 'UPDATED'; item: CreateVocabularyItemResult };
+
 type ArchiveUserVocabularyItemInput = {
   userId: string;
   vocabularyItemId: string;
@@ -386,6 +402,99 @@ export class VocabularyRepository {
       return {
         vocabularyItem,
         userWord: userWordModel,
+      };
+    });
+  }
+
+  async replaceVocabularyItemContent(
+    input: ReplaceVocabularyItemContentInput,
+  ): Promise<ReplaceVocabularyItemContentResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const lockedItems = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "VocabularyItem"
+        WHERE "id" = ${input.vocabularyItemId}
+        FOR UPDATE
+      `;
+
+      if (lockedItems.length === 0) {
+        return { status: 'NOT_FOUND' };
+      }
+
+      const userWord = await tx.userWord.findFirst({
+        where: {
+          userId: input.userId,
+          vocabularyItemId: input.vocabularyItemId,
+          vocabularyItem: {
+            languagePairId: input.languagePairId,
+            isActive: true,
+          },
+        },
+        select: {
+          id: true,
+          vocabularyItem: {
+            select: {
+              createdByUserId: true,
+              visibility: true,
+              _count: {
+                select: {
+                  userWords: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!userWord) {
+        return { status: 'NOT_FOUND' };
+      }
+
+      if (
+        userWord.vocabularyItem.createdByUserId !== input.userId ||
+        userWord.vocabularyItem.visibility !== AudienceScope.PRIVATE ||
+        userWord.vocabularyItem._count.userWords !== 1
+      ) {
+        return { status: 'NOT_EDITABLE' };
+      }
+
+      const vocabularyItem = await tx.vocabularyItem.update({
+        where: {
+          id: input.vocabularyItemId,
+        },
+        data: {
+          sourceText: input.sourceText,
+          targetText: input.targetText,
+          sourceNormalized: input.sourceNormalized,
+          targetNormalized: input.targetNormalized,
+          examples: {
+            deleteMany: {},
+            ...(input.examples.length > 0
+              ? {
+                  create: input.examples.map((example) => ({
+                    sourceSentence: example.sourceSentence,
+                    targetSentence: example.targetSentence,
+                  })),
+                }
+              : {}),
+          },
+        },
+        select: vocabularyItemSelect,
+      });
+
+      const updatedUserWord = await tx.userWord.findUniqueOrThrow({
+        where: {
+          id: userWord.id,
+        },
+        select: userWordSelect,
+      });
+
+      return {
+        status: 'UPDATED',
+        item: {
+          vocabularyItem,
+          userWord: updatedUserWord,
+        },
       };
     });
   }

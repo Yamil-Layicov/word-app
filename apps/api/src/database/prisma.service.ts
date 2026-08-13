@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import { assertSafeTestDatabaseUrl } from './test-database.guard';
 
 @Injectable()
 export class PrismaService
@@ -13,6 +14,8 @@ export class PrismaService
     if (!databaseUrl) {
       throw new Error('DATABASE_URL is not defined');
     }
+
+    assertSafeTestDatabaseUrl(databaseUrl);
 
     const adapter = new PrismaPg({
       connectionString: databaseUrl,

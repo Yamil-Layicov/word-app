@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { LanguagePair } from "@/entities/lookups";
 import { useLanguagePairsQuery } from "@/entities/lookups";
+import { useMeLanguagePairsQuery } from "@/entities/user-language-pair";
 import {
   buildRegisterRequest,
   clearGoogleAuthDraft,
@@ -14,9 +15,11 @@ import {
   isGoogleAuthAuthenticated,
   saveRegisterLanguagePair,
   useGoogleAuth,
+  useAuthSession,
   useRegister,
   useStartSession,
 } from "@/features/auth";
+import { useAddLanguagePair, useSetActiveLanguagePair } from "@/features/me";
 import { consumePendingNotificationDestination } from "@/features/push-notifications";
 import { getApiRetryAfterSeconds, isApiError } from "@/shared/api/http-error";
 import {
@@ -32,6 +35,14 @@ export function LanguagePairSelectionScreen() {
   const registerMutation = useRegister();
   const googleAuthMutation = useGoogleAuth();
   const startSession = useStartSession();
+  const { completeOnboarding, endSession, status: sessionStatus, user } =
+    useAuthSession();
+  const isAuthenticatedOnboarding = sessionStatus === "onboarding-required";
+  const meLanguagePairsQuery = useMeLanguagePairsQuery({
+    enabled: isAuthenticatedOnboarding,
+  });
+  const addLanguagePairMutation = useAddLanguagePair();
+  const setActiveLanguagePairMutation = useSetActiveLanguagePair();
   const retryAfterCountdown = useRetryAfterCountdown();
   const registerDraft = getRegisterDraft();
   const googleAuthDraft = getGoogleAuthDraft();
@@ -57,6 +68,34 @@ export function LanguagePairSelectionScreen() {
 
     if (!selectedLanguagePair) {
       setNotice("Choose a language pair to continue.");
+      return;
+    }
+
+    if (isAuthenticatedOnboarding) {
+      setNotice(null);
+
+      try {
+        const existingPair = meLanguagePairsQuery.data?.find(
+          (pair) => pair.languagePairId === selectedLanguagePair.id,
+        );
+
+        if (existingPair) {
+          await setActiveLanguagePairMutation.mutateAsync({
+            languagePairId: selectedLanguagePair.id,
+          });
+        } else {
+          await addLanguagePairMutation.mutateAsync({
+            languagePairId: selectedLanguagePair.id,
+          });
+        }
+
+        await completeOnboarding();
+        clearGoogleAuthDraft();
+        clearRegisterDraft();
+        router.replace(consumePendingNotificationDestination() ?? "/(app)");
+      } catch (error) {
+        handleMutationError(error, "Could not finish account setup.");
+      }
       return;
     }
 
@@ -126,7 +165,12 @@ export function LanguagePairSelectionScreen() {
   };
 
   const isPending =
-    registerMutation.isPending || googleAuthMutation.isPending;
+    registerMutation.isPending ||
+    googleAuthMutation.isPending ||
+    addLanguagePairMutation.isPending ||
+    setActiveLanguagePairMutation.isPending;
+  const isLoadingAuthenticatedOnboarding =
+    isAuthenticatedOnboarding && meLanguagePairsQuery.isLoading;
 
   return (
     <ScreenContainer
@@ -134,12 +178,23 @@ export function LanguagePairSelectionScreen() {
       contentStyle={styles.content}
     >
       <View style={styles.topBar}>
-        <Link
-          href={googleAuthDraft ? "/login" : "/register"}
-          style={styles.backLink}
-        >
-          Back
-        </Link>
+        {isAuthenticatedOnboarding ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              void endSession().then(() => router.replace("/login"));
+            }}
+          >
+            <Text style={styles.backLink}>Log out</Text>
+          </Pressable>
+        ) : (
+          <Link
+            href={googleAuthDraft ? "/login" : "/register"}
+            style={styles.backLink}
+          >
+            Back
+          </Link>
+        )}
       </View>
 
       <View style={styles.header}>
@@ -148,15 +203,19 @@ export function LanguagePairSelectionScreen() {
         </View>
         <Text style={styles.title}>Choose your languages</Text>
         <Text style={styles.subtitle}>
-          {googleAuthDraft
+          {isAuthenticatedOnboarding
+            ? `Choose the first language pair for ${user?.email ?? "your account"}.`
+            : googleAuthDraft
             ? `Choose the first language pair for ${googleAuthDraft.profile.email}.`
             : "Pick the first language pair you want to learn with Word App."}
         </Text>
       </View>
 
-      {isLoading ? <StateMessage title="Loading languages..." /> : null}
+      {isLoading || isLoadingAuthenticatedOnboarding ? (
+        <StateMessage title="Loading languages..." />
+      ) : null}
 
-      {isError ? (
+      {isError || (isAuthenticatedOnboarding && meLanguagePairsQuery.isError) ? (
         <View style={styles.stateBox}>
           <Text style={styles.stateTitle}>Could not load language pairs.</Text>
           <Text style={styles.stateText}>
@@ -165,7 +224,12 @@ export function LanguagePairSelectionScreen() {
           <Button
             title="Try again"
             variant="secondary"
-            onPress={() => void refetch()}
+            onPress={() => {
+              void refetch();
+              if (isAuthenticatedOnboarding) {
+                void meLanguagePairsQuery.refetch();
+              }
+            }}
           />
         </View>
       ) : null}
@@ -195,6 +259,7 @@ export function LanguagePairSelectionScreen() {
       <Button
         disabled={
           !selectedLanguagePair ||
+          isLoadingAuthenticatedOnboarding ||
           isPending ||
           retryAfterCountdown.isActive
         }
@@ -204,7 +269,7 @@ export function LanguagePairSelectionScreen() {
             ? `Try again in ${formatRetryAfterDuration(
                 retryAfterCountdown.remainingSeconds,
               )}`
-            : googleAuthDraft
+            : googleAuthDraft || isAuthenticatedOnboarding
               ? "Continue"
               : "Create account"
         }

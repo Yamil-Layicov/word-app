@@ -125,10 +125,6 @@ export class MeService {
       throw new ForbiddenException('Account is not active');
     }
 
-    if (!result.user.profile) {
-      throw new BadRequestException('User profile is not found');
-    }
-
     if (!result.languagePair) {
       throw new BadRequestException('Invalid language pair');
     }
@@ -141,7 +137,7 @@ export class MeService {
       throw new ConflictException('Language pair already added');
     }
 
-    const shouldSetAsActive = !result.user.profile.activeLanguagePairId;
+    const shouldSetAsActive = !result.user.profile?.activeLanguagePairId;
 
     await this.meRepository.addLanguagePairForUser({
       userId: currentUser.id,
@@ -172,10 +168,6 @@ export class MeService {
       throw new ForbiddenException('Account is not active');
     }
 
-    if (!result.profile) {
-      throw new BadRequestException('User profile is not found');
-    }
-
     const [userLanguagePair] = result.languagePairs;
 
     if (!userLanguagePair) {
@@ -193,7 +185,7 @@ export class MeService {
     }
 
     if (
-      result.profile.activeLanguagePairId !== userLanguagePair.languagePairId
+      result.profile?.activeLanguagePairId !== userLanguagePair.languagePairId
     ) {
       await this.meRepository.updateActiveLanguagePair(
         currentUser.id,

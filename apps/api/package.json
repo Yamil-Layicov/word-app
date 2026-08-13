@@ -17,7 +17,11 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "pretest:e2e": "pnpm db:test:migrate && pnpm db:test:seed",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "db:test:check": "node --env-file=.env.test --import tsx test/helpers/assert-e2e-database.ts",
+    "db:test:migrate": "pnpm db:test:check && node --env-file=.env.test ./node_modules/prisma/build/index.js migrate deploy",
+    "db:test:seed": "pnpm db:test:check && node --env-file=.env.test --import tsx prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

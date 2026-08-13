@@ -7,10 +7,12 @@ import {
   deleteVocabularyItemPermanently,
   getVocabularyItem,
   listVocabularyItems,
+  replaceVocabularyItemContent,
   updateVocabularyItem,
 } from "../api";
 import type {
   CreateVocabularyItemRequest,
+  ReplaceVocabularyItemContentRequest,
   UpdateVocabularyItemRequest,
   VocabularyItemsFilters,
 } from "../model";
@@ -21,6 +23,7 @@ jest.mock("@/auth", () => ({
     get: jest.fn(),
     patch: jest.fn(),
     post: jest.fn(),
+    put: jest.fn(),
   },
 }));
 
@@ -28,6 +31,7 @@ const deleteMock = authClient.delete as jest.Mock;
 const getMock = authClient.get as jest.Mock;
 const patchMock = authClient.patch as jest.Mock;
 const postMock = authClient.post as jest.Mock;
+const putMock = authClient.put as jest.Mock;
 
 describe("vocabulary item API", () => {
   beforeEach(() => {
@@ -104,6 +108,30 @@ describe("vocabulary item API", () => {
     await expect(updateVocabularyItem("item-1", input)).resolves.toBe(response);
 
     expect(patchMock).toHaveBeenCalledWith("/vocabulary/items/item-1", input);
+  });
+
+  it("replaces editable content with the complete request body", async () => {
+    const input: ReplaceVocabularyItemContentRequest = {
+      sourceText: "book",
+      targetText: "kitab",
+      examples: [
+        {
+          sourceSentence: "This is a book.",
+          targetSentence: "Bu kitabdir.",
+        },
+      ],
+    };
+    const response = { id: "item-1" };
+    putMock.mockResolvedValue(response);
+
+    await expect(
+      replaceVocabularyItemContent("item-1", input),
+    ).resolves.toBe(response);
+
+    expect(putMock).toHaveBeenCalledWith(
+      "/vocabulary/items/item-1/content",
+      input,
+    );
   });
 
   it("archives one vocabulary item without expecting a response body", async () => {

@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 import { CreateVocabularyItemDto } from './dto/create-vocabulary-item.dto';
 import { ListVocabularyItemsQueryDto } from './dto/list-vocabulary-items-query.dto';
+import { ReplaceVocabularyItemContentDto } from './dto/replace-vocabulary-item-content.dto';
 import { UpdateUserVocabularyItemDto } from './dto/update-user-vocabulary-item.dto';
 import { VocabularyService } from './vocabulary.service';
 
@@ -64,6 +66,20 @@ export class VocabularyController {
       currentUser,
       vocabularyItemId,
       updateUserVocabularyItemDto,
+    );
+  }
+
+  @Put('items/:id/content')
+  @UseGuards(AccessTokenGuard)
+  replaceItemContent(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') vocabularyItemId: string,
+    @Body() replaceVocabularyItemContentDto: ReplaceVocabularyItemContentDto,
+  ) {
+    return this.vocabularyService.replaceItemContent(
+      currentUser,
+      vocabularyItemId,
+      replaceVocabularyItemContentDto,
     );
   }
 

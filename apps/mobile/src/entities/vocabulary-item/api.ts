@@ -1,6 +1,7 @@
 import { authClient } from "@/auth";
 import type {
   CreateVocabularyItemRequest,
+  ReplaceVocabularyItemContentRequest,
   UpdateVocabularyItemRequest,
   VocabularyItem,
   VocabularyItemsFilters,
@@ -23,6 +24,13 @@ export function createVocabularyItem(input: CreateVocabularyItemRequest) {
 
 export function updateVocabularyItem(id: string, input: UpdateVocabularyItemRequest) {
   return authClient.patch<VocabularyItem>(`/vocabulary/items/${id}`, input);
+}
+
+export function replaceVocabularyItemContent(
+  id: string,
+  input: ReplaceVocabularyItemContentRequest,
+) {
+  return authClient.put<VocabularyItem>(`/vocabulary/items/${id}/content`, input);
 }
 
 export function archiveVocabularyItem(id: string) {

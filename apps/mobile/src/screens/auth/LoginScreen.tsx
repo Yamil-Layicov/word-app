@@ -68,8 +68,12 @@ export function LoginScreen() {
 
       clearGoogleAuthDraft();
       clearRegisterDraft();
-      await startSession(response);
-      router.replace(consumePendingNotificationDestination() ?? "/(app)");
+      const sessionStatus = await startSession(response);
+      router.replace(
+        sessionStatus === "onboarding-required"
+          ? "/language-pair"
+          : consumePendingNotificationDestination() ?? "/(app)",
+      );
     } catch (error) {
       if (
         isApiError(error) &&
@@ -120,8 +124,12 @@ export function LoginScreen() {
       if (isGoogleAuthAuthenticated(response)) {
         clearGoogleAuthDraft();
         clearRegisterDraft();
-        await startSession(response);
-        router.replace(consumePendingNotificationDestination() ?? "/(app)");
+        const sessionStatus = await startSession(response);
+        router.replace(
+          sessionStatus === "onboarding-required"
+            ? "/language-pair"
+            : consumePendingNotificationDestination() ?? "/(app)",
+        );
         return;
       }
 

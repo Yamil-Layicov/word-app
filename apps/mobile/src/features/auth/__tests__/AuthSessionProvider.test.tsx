@@ -15,7 +15,7 @@ import {
 import { syncCurrentDevicePushToken } from "@/features/push-notifications";
 import { ApiError } from "@/shared/api/http-error";
 import { queryClient } from "@/shared/lib/query-client";
-import { logoutSession, refreshSession } from "../api";
+import { getCurrentUser, logoutSession, refreshSession } from "../api";
 import {
   AuthSessionProvider,
   useAuthSession,
@@ -46,6 +46,7 @@ jest.mock("@/shared/lib/query-client", () => ({
 }));
 
 jest.mock("../api", () => ({
+  getCurrentUser: jest.fn(),
   logoutSession: jest.fn(),
   refreshSession: jest.fn(),
 }));
@@ -68,6 +69,7 @@ const mockSyncCurrentDevicePushToken = jest.mocked(
 );
 const mockQueryClientClear = jest.mocked(queryClient.clear);
 const mockSetQueryData = jest.mocked(queryClient.setQueryData);
+const mockGetCurrentUser = jest.mocked(getCurrentUser);
 const mockLogoutSession = jest.mocked(logoutSession);
 const mockRefreshSession = jest.mocked(refreshSession);
 const mockClearGoogleSignInSession = jest.mocked(clearGoogleSignInSession);
@@ -82,8 +84,25 @@ const authResponse: AuthTokensResponse = {
     email: "user@example.com",
     role: "USER",
     status: "ACTIVE",
-    profile: null,
+    profile: {
+      id: "profile-1",
+      displayName: "Test User",
+      countryCode: null,
+      interfaceLanguage: "az",
+      activeLanguagePairId: "pair-1",
+    },
     createdAt: "2026-08-03T08:00:00.000Z",
+  },
+};
+
+const incompleteAuthResponse: AuthTokensResponse = {
+  ...authResponse,
+  user: {
+    ...authResponse.user,
+    profile: {
+      ...authResponse.user.profile!,
+      activeLanguagePairId: null,
+    },
   },
 };
 
@@ -100,6 +119,7 @@ describe("AuthSessionProvider", () => {
     mockConfigureAuthSessionHandlers.mockReturnValue(jest.fn());
     mockSyncCurrentDevicePushToken.mockResolvedValue(undefined);
     mockLogoutSession.mockResolvedValue(undefined);
+    mockGetCurrentUser.mockResolvedValue(authResponse.user);
     mockClearGoogleSignInSession.mockResolvedValue(undefined);
   });
 
@@ -132,6 +152,16 @@ describe("AuthSessionProvider", () => {
       authResponse.user,
     );
     expect(mockSyncCurrentDevicePushToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores an incomplete session into mandatory onboarding", async () => {
+    mockGetStoredRefreshToken.mockResolvedValue("stored-refresh-token");
+    mockRefreshSession.mockResolvedValue(incompleteAuthResponse);
+
+    renderProvider();
+
+    expect(await screen.findByText("onboarding-required")).toBeTruthy();
+    expect(getCurrentSession().user).toEqual(incompleteAuthResponse.user);
   });
 
   it.each([400, 401, 403])(
@@ -179,6 +209,26 @@ describe("AuthSessionProvider", () => {
     expect(mockSaveRefreshToken).toHaveBeenCalledWith("refresh-token");
     expect(mockBeginAccessTokenSession).toHaveBeenCalledWith("access-token");
     expect(screen.getByText("authenticated")).toBeTruthy();
+  });
+
+  it("promotes an incomplete session after onboarding is completed", async () => {
+    renderProvider();
+    await screen.findByText("unauthenticated");
+
+    await act(async () => {
+      await getCurrentSession().startSession(incompleteAuthResponse);
+    });
+
+    expect(screen.getByText("onboarding-required")).toBeTruthy();
+    mockGetCurrentUser.mockResolvedValue(authResponse.user);
+
+    await act(async () => {
+      await getCurrentSession().completeOnboarding();
+    });
+
+    expect(mockGetCurrentUser).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("authenticated")).toBeTruthy();
+    expect(getCurrentSession().user).toEqual(authResponse.user);
   });
 
   it("revokes a new server session when local token persistence fails", async () => {

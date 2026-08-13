@@ -9,9 +9,11 @@ import { reviewQueryKeys } from "@/entities/review";
 import {
   createVocabularyItem,
   deleteVocabularyItemPermanently,
+  replaceVocabularyItemContent,
   updateVocabularyItem,
   vocabularyItemQueryKeys,
   type CreateVocabularyItemRequest,
+  type ReplaceVocabularyItemContentRequest,
   type UpdateVocabularyItemRequest,
   type VocabularyItem,
 } from "@/entities/vocabulary-item";
@@ -19,6 +21,7 @@ import { scheduledReviewQueryKeys } from "@/features/review-boxes";
 import { queryClient } from "@/shared/lib/query-client";
 import { useCreateVocabularyItem } from "../hooks/useCreateVocabularyItem";
 import { useDeleteVocabularyItemPermanently } from "../hooks/useDeleteVocabularyItemPermanently";
+import { useReplaceVocabularyItemContent } from "../hooks/useReplaceVocabularyItemContent";
 import { useUpdateVocabularyItem } from "../hooks/useUpdateVocabularyItem";
 
 jest.mock("@tanstack/react-query", () => ({
@@ -29,6 +32,7 @@ jest.mock("@/entities/vocabulary-item", () => ({
   ...jest.requireActual("@/entities/vocabulary-item/query-keys"),
   createVocabularyItem: jest.fn(),
   deleteVocabularyItemPermanently: jest.fn(),
+  replaceVocabularyItemContent: jest.fn(),
   updateVocabularyItem: jest.fn(),
 }));
 
@@ -43,6 +47,9 @@ jest.mock("@/shared/lib/query-client", () => ({
 const mockCreateVocabularyItem = jest.mocked(createVocabularyItem);
 const mockDeleteVocabularyItemPermanently = jest.mocked(
   deleteVocabularyItemPermanently,
+);
+const mockReplaceVocabularyItemContent = jest.mocked(
+  replaceVocabularyItemContent,
 );
 const mockUpdateVocabularyItem = jest.mocked(updateVocabularyItem);
 const mockInvalidateQueries = jest.mocked(queryClient.invalidateQueries);
@@ -59,8 +66,18 @@ type UpdateInput = {
   data: UpdateVocabularyItemRequest;
 };
 
+type ReplaceContentInput = {
+  id: string;
+  data: ReplaceVocabularyItemContentRequest;
+};
+
 type UpdateMutationOptions = {
   mutationFn: (input: UpdateInput) => Promise<VocabularyItem>;
+  onSuccess: (item: VocabularyItem) => void;
+};
+
+type ReplaceContentMutationOptions = {
+  mutationFn: (input: ReplaceContentInput) => Promise<VocabularyItem>;
   onSuccess: (item: VocabularyItem) => void;
 };
 
@@ -129,6 +146,41 @@ describe("vocabulary mutation cache behavior", () => {
     ]);
   });
 
+  it("refreshes every projection affected by edited vocabulary content", async () => {
+    const input: ReplaceContentInput = {
+      id: "vocabulary-item-1",
+      data: {
+        sourceText: "welcome",
+        targetText: "xoş gəldin",
+        examples: [],
+      },
+    };
+    mockReplaceVocabularyItemContent.mockResolvedValue(item);
+    const mutation = getReplaceContentMutation();
+
+    await expect(mutation.mutationFn(input)).resolves.toBe(item);
+    mutation.onSuccess(item);
+
+    expect(mockReplaceVocabularyItemContent).toHaveBeenCalledWith(
+      "vocabulary-item-1",
+      input.data,
+    );
+    expect(mockSetQueryData).toHaveBeenCalledWith(
+      vocabularyItemQueryKeys.detail("vocabulary-item-1"),
+      item,
+    );
+    expect(
+      mockInvalidateQueries.mock.calls.map(([filters]) => filters),
+    ).toEqual([
+      { queryKey: vocabularyItemQueryKeys.lists() },
+      { queryKey: deckQueryKeys.all },
+      { queryKey: masteredCollectionQueryKeys.all },
+      { queryKey: scheduledReviewQueryKeys.all },
+      { queryKey: reviewQueryKeys.all },
+      { queryKey: practiceItemQueryKeys.lists() },
+    ]);
+  });
+
   it("clears every user projection after permanent deletion", async () => {
     mockDeleteVocabularyItemPermanently.mockResolvedValue(undefined);
     const mutation = getDeleteMutation();
@@ -184,6 +236,12 @@ function getUpdateMutation(): UpdateMutationOptions {
   const { result } = renderHook(() => useUpdateVocabularyItem());
 
   return result.current as unknown as UpdateMutationOptions;
+}
+
+function getReplaceContentMutation(): ReplaceContentMutationOptions {
+  const { result } = renderHook(() => useReplaceVocabularyItemContent());
+
+  return result.current as unknown as ReplaceContentMutationOptions;
 }
 
 function getDeleteMutation(): DeleteMutationOptions {

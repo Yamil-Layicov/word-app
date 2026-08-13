@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,7 @@ import { ClockService } from '../../common/time/clock.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateVocabularyItemDto } from './dto/create-vocabulary-item.dto';
 import { ListVocabularyItemsQueryDto } from './dto/list-vocabulary-items-query.dto';
+import { ReplaceVocabularyItemContentDto } from './dto/replace-vocabulary-item-content.dto';
 import { UpdateUserVocabularyItemDto } from './dto/update-user-vocabulary-item.dto';
 import {
   toListVocabularyItemsResponse,
@@ -182,6 +184,57 @@ export class VocabularyService {
     return toVocabularyItemResponse(result);
   }
 
+  async replaceItemContent(
+    currentUser: AuthenticatedUser,
+    vocabularyItemId: string,
+    replaceVocabularyItemContentDto: ReplaceVocabularyItemContentDto,
+  ): Promise<VocabularyItemResponse> {
+    const activeLanguagePairId = await this.getActiveLanguagePairId(
+      currentUser.id,
+    );
+    const sourceText = this.normalizeInputText(
+      replaceVocabularyItemContentDto.sourceText,
+    );
+    const targetText = this.normalizeInputText(
+      replaceVocabularyItemContentDto.targetText,
+    );
+
+    let result;
+
+    try {
+      result = await this.vocabularyRepository.replaceVocabularyItemContent({
+        userId: currentUser.id,
+        vocabularyItemId,
+        languagePairId: activeLanguagePairId,
+        sourceText,
+        targetText,
+        sourceNormalized: this.normalizeSearchText(sourceText),
+        targetNormalized: this.normalizeSearchText(targetText),
+        examples: this.normalizeExamples(
+          replaceVocabularyItemContentDto.examples,
+        ),
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException(
+          'A vocabulary item with this word and translation already exists',
+        );
+      }
+
+      throw error;
+    }
+
+    if (result.status === 'NOT_FOUND') {
+      throw new NotFoundException('Vocabulary item not found');
+    }
+
+    if (result.status === 'NOT_EDITABLE') {
+      throw new ConflictException('Shared vocabulary content cannot be edited');
+    }
+
+    return toVocabularyItemResponse(result.item);
+  }
+
   async archiveUserItem(
     currentUser: AuthenticatedUser,
     vocabularyItemId: string,
@@ -290,5 +343,14 @@ export class VocabularyService {
       sourceSentence: this.normalizeInputText(example.sourceSentence),
       targetSentence: this.normalizeInputText(example.targetSentence),
     }));
+  }
+
+  private isUniqueConstraintError(error: unknown): error is { code: 'P2002' } {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
+    );
   }
 }

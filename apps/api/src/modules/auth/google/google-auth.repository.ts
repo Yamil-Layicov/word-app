@@ -18,6 +18,12 @@ type LinkGoogleIdentityInput = {
   userId: string;
 };
 
+type CompleteGoogleOnboardingInput = {
+  displayName?: string;
+  languagePairId: string;
+  userId: string;
+};
+
 type GoogleAutoLinkUser = AuthUserResponseModel & {
   emailVerifiedAt: Date | null;
 };
@@ -148,6 +154,55 @@ export class GoogleAuthRepository {
       orderBy: {
         createdAt: 'asc',
       },
+    });
+  }
+
+  async completeGoogleOnboarding(
+    input: CompleteGoogleOnboardingInput,
+  ): Promise<AuthUserResponseModel> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.userProfile.upsert({
+        where: {
+          userId: input.userId,
+        },
+        create: {
+          userId: input.userId,
+          displayName: input.displayName,
+          activeLanguagePairId: input.languagePairId,
+        },
+        update: {
+          activeLanguagePairId: input.languagePairId,
+        },
+      });
+
+      await tx.userLanguagePair.upsert({
+        where: {
+          userId_languagePairId: {
+            userId: input.userId,
+            languagePairId: input.languagePairId,
+          },
+        },
+        create: {
+          userId: input.userId,
+          languagePairId: input.languagePairId,
+        },
+        update: {
+          isLearning: true,
+        },
+      });
+
+      const user = await tx.user.findUnique({
+        where: {
+          id: input.userId,
+        },
+        select: authUserResponseSelect,
+      });
+
+      if (!user) {
+        throw new Error('Google user disappeared during onboarding');
+      }
+
+      return user;
     });
   }
 

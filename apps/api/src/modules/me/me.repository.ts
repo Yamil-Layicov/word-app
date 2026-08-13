@@ -226,11 +226,15 @@ export class MeRepository {
     userId: string,
     languagePairId: string,
   ): Promise<void> {
-    await this.prisma.userProfile.update({
+    await this.prisma.userProfile.upsert({
       where: {
         userId,
       },
-      data: {
+      create: {
+        userId,
+        activeLanguagePairId: languagePairId,
+      },
+      update: {
         activeLanguagePairId: languagePairId,
       },
     });
@@ -296,11 +300,15 @@ export class MeRepository {
       });
 
       if (input.setAsActive) {
-        await tx.userProfile.update({
+        await tx.userProfile.upsert({
           where: {
             userId: input.userId,
           },
-          data: {
+          create: {
+            userId: input.userId,
+            activeLanguagePairId: input.languagePairId,
+          },
+          update: {
             activeLanguagePairId: input.languagePairId,
           },
         });

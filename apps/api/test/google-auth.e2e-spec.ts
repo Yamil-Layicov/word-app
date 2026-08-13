@@ -114,14 +114,32 @@ describe('GoogleAuthController (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`);
   }
 
-  async function createPasswordAccount(email: string) {
+  async function createPasswordAccount(
+    email: string,
+    options: { completeProfile?: boolean } = {},
+  ) {
     const password = 'Password123!';
     const passwordHash = await passwordService.hash(password);
+    const completeProfile = options.completeProfile ?? true;
     const user = await prisma.user.create({
       data: {
         email,
         passwordHash,
         emailVerifiedAt: new Date(),
+        ...(completeProfile
+          ? {
+              profile: {
+                create: {
+                  activeLanguagePairId: languagePairId,
+                },
+              },
+              languagePairs: {
+                create: {
+                  languagePairId,
+                },
+              },
+            }
+          : {}),
       },
     });
 
@@ -383,6 +401,38 @@ describe('GoogleAuthController (e2e)', () => {
         emailAtLinkTime: claims.email,
       },
     ]);
+  });
+
+  it('requires and completes onboarding for an existing Google identity without an active language pair', async () => {
+    const { claims, idToken } = addGoogleIdentity('incomplete-existing');
+    const { user } = await createPasswordAccount(claims.email, {
+      completeProfile: false,
+    });
+
+    const onboardingResponse = await postGoogle(idToken).expect(200);
+    const onboardingBody = expectObject(onboardingResponse.body as unknown);
+
+    expect(onboardingBody.status).toBe(GOOGLE_AUTH_STATUS.onboardingRequired);
+    expect(onboardingBody).not.toHaveProperty('accessToken');
+
+    const completedResponse = await postGoogle(idToken, {
+      languagePairId,
+    }).expect(200);
+    const completedBody = expectObject(completedResponse.body as unknown);
+    const completedUser = expectObject(completedBody.user);
+    const completedProfile = expectObject(completedUser.profile);
+
+    expect(completedBody.status).toBe(GOOGLE_AUTH_STATUS.authenticated);
+    expect(completedUser.id).toBe(user.id);
+    expect(completedProfile.activeLanguagePairId).toBe(languagePairId);
+    await expect(
+      prisma.userLanguagePair.count({
+        where: {
+          userId: user.id,
+          languagePairId,
+        },
+      }),
+    ).resolves.toBe(1);
   });
 
   it('does not automatically link an unverified password account', async () => {
